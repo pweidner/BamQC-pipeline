@@ -1,7 +1,10 @@
 # Import necessary modules
 import os
 import glob
+import subprocess
 import yaml
+import pandas as pd
+from utils import extract_alignment_metrics
 
 #ASCII art for BamQC-BIH
 print(r"""
@@ -38,14 +41,16 @@ print("")
 # Define the file path to the reference genomes
 reference_file = os.path.join(reference_path, f"{ref}.fa")
 
+# Define the list of samples based on the input BAM files
+samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+
 # Rule to generate a list of BAM files
 rule all:
     """
     Collect all sample QC files as final outputs
     """ 
     input:    
-        input_files = [os.path.join(config['output_location'], f"{sample}.qc.tsv.gz")
-                      for sample in [f.split('/')[-1].split('.')[0] for f in glob.glob(os.path.join(config['data_location'], '*.sort.mdup.bam'))]]   
+        os.path.join(output_location, "alignment_summary_metrics.tsv")
 
 # Print the expand function to debug
 print("Expanding input files with the following pattern:")
@@ -66,3 +71,36 @@ rule alfred_qc:
         alfred qc -r {input.reference} -o {output.qc} {input.bam}
         """
 
+rule aggregate_alignment_metrics:
+    input:
+        expand(os.path.join(output_location, "{sample}.qc.tsv.gz"), sample=samples)
+    output:
+        summary = os.path.join(output_location, "alignment_summary_metrics.tsv")
+    params:
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+    run:
+        # Use zgrep and cut to extract alignment summary metrics into a temporary file
+        tmp_file = output[0].replace(".tsv", "_tmp.tsv")
+        zgrep_cut_cmd = f"zgrep ^ME {input} | cut -f 2- > {tmp_file}"
+        shell(zgrep_cut_cmd)
+        
+        # Initialize a DataFrame to store aggregated metrics
+        df = None
+        # Iterate over individual sample files
+        for sample_file in input:
+            # Extract alignment summary metrics for the current sample
+            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
+
+            # Append the sample DataFrame to the main DataFrame
+            if df is None:
+                df = sample_df
+            else:
+                # Append the second row of the DataFrame
+                df = pd.concat([df, sample_df.iloc[1:]]) 
+        
+        # Write the aggregated metrics to the output file
+        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.summary), mode='a')
+
+        # Remove the temporary file
+        os.remove(tmp_file)
