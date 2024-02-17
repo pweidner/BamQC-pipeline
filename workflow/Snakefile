@@ -1,0 +1,66 @@
+# Import necessary modules
+import os
+import glob
+import yaml
+
+#ASCII art for BamQC-BIH
+print(r"""
+
+
+/$$$$$$$                           /$$$$$$   /$$$$$$        /$$$$$$$  /$$$$$$ /$$   /$$
+| $$__  $$                         /$$__  $$ /$$__  $$      | $$__  $$|_  $$_/| $$  | $$
+| $$  \ $$  /$$$$$$  /$$$$$$/$$$$ | $$  \ $$| $$  \__/      | $$  \ $$  | $$  | $$  | $$
+| $$$$$$$  |____  $$| $$_  $$_  $$| $$  | $$| $$            | $$$$$$$   | $$  | $$$$$$$$
+| $$__  $$  /$$$$$$$| $$ \ $$ \ $$| $$  | $$| $$            | $$__  $$  | $$  | $$__  $$
+| $$  \ $$ /$$__  $$| $$ | $$ | $$| $$/$$ $$| $$    $$      | $$  \ $$  | $$  | $$  | $$
+| $$$$$$$/|  $$$$$$$| $$ | $$ | $$|  $$$$$$/|  $$$$$$/      | $$$$$$$/ /$$$$$$| $$  | $$
+|_______/  \_______/|__/ |__/ |__/ \____ $$$ \______/       |_______/ |______/|__/  |__/
+                                        \__/                                                       
+
+""")
+
+# Load config
+configfile: "config/config.yaml"
+
+# Define input and output directories
+data_location = config["data_location"]
+output_location = config["output_location"]
+ref = config["ref"]
+reference_path = config["reference_path"]
+
+# Print summary of parameters
+print("Pipeline launched with the following parameters:")
+print(f"- Data Location: \033[1;31m{data_location}\033[0m")
+print(f"- Output Location: \033[1;32m{output_location}\033[0m")
+print(f"- Reference Genome: \033[1;33m{ref}\033[0m")
+
+# Define the file path to the reference genomes
+reference_file = os.path.join(reference_path, f"{ref}.fa")
+
+# Rule to generate a list of BAM files
+rule all:
+    """
+    Collect all sample QC files as final outputs
+    """ 
+    input:    
+        input_files = [os.path.join(config['output_location'], f"{sample}.qc.tsv.gz")
+                      for sample in [f.split('/')[-1].split('.')[0] for f in glob.glob(os.path.join(config['data_location'], '*.sort.mdup.bam'))]]   
+
+# Print the expand function to debug
+print("Expanding input files with the following pattern:")
+print(os.path.join(config['output_location'], "{sample}.qc.tsv.gz"))
+
+# Rule to apply Alfred QC pipeline to each BAM file individually
+rule alfred_qc:
+    input:
+        bam = os.path.join(data_location, "{sample}.sort.mdup.bam"),
+        reference = reference_file
+    output:
+        qc = os.path.join(output_location, "{sample}.qc.tsv.gz")
+    conda:
+        "envs/qc_env.yaml"
+    shell:
+        """
+        alfred qc -r {input.reference} -o {output.qc} {input.bam}
+        """
+
