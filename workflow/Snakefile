@@ -90,7 +90,7 @@ rule aggregate_alignment_metrics:
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
             sample_metrics = extract_alignment_metrics(sample_file)
-            sample_df = pd.DataFrame.from_dict(sample_metrics, orient='index')
+            sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
             if df is None:
