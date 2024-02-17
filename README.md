@@ -1,4 +1,4 @@
-# BamQC-BIH pipeline
+# BamQC-pipeline
 
 Snakemake workflow for automated BAM alignment statistics intended to run on the BIH cluster using SLURM scheduler for parallelization.
 
@@ -7,7 +7,7 @@ Snakemake workflow for automated BAM alignment statistics intended to run on the
 Clone the repository into your personal work (e.g. /fast/users/$USER/work/)
 
 ```bash
-git clone
+git clone https://github.com/pweidner/BamQC-pipeline.git
 ```
 The pipeline currently looks like this:
 
@@ -27,7 +27,7 @@ BamQC-BIH/
         └── errors/
 ```
 
-Next you need to set up a conda environment to launch snakemake from
+To run the pipeline, you need to set up a conda environment to launch snakemake from
 
 ```bash
 mamaba create -n snakemake snakemake=7.32.0
