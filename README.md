@@ -1,6 +1,6 @@
-# BIH alignment
+# BamQC-BIH pipeline
 
-Scripts for performing alignment of paired-end NGS reads to the hg38 reference genome using BWA-MEM on the BIH HPC cluster. 
+Snakemake workflow for automated BAM alignment statistics intended to run on the BIH cluster using SLURM scheduler for parallelization.
 
 ## 1. Download raw sequencing data
 
