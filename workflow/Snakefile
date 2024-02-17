@@ -33,6 +33,7 @@ print("Pipeline launched with the following parameters:")
 print(f"- Data Location: \033[1;31m{data_location}\033[0m")
 print(f"- Output Location: \033[1;32m{output_location}\033[0m")
 print(f"- Reference Genome: \033[1;33m{ref}\033[0m")
+print("")
 
 # Define the file path to the reference genomes
 reference_file = os.path.join(reference_path, f"{ref}.fa")
@@ -49,6 +50,7 @@ rule all:
 # Print the expand function to debug
 print("Expanding input files with the following pattern:")
 print(os.path.join(config['output_location'], "{sample}.qc.tsv.gz"))
+print("")
 
 # Rule to apply Alfred QC pipeline to each BAM file individually
 rule alfred_qc:
