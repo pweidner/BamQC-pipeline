@@ -12,19 +12,20 @@ git clone https://github.com/pweidner/BamQC-pipeline.git
 The pipeline currently looks like this:
 
 ```
-BamQC-pipeline/
+BamQC-pipeline/            # Run the pipeline from here
 │
 ├── config/
-│   └── config.yaml
-│
+│   └── config.yaml        # Config parameters for user input
 └── workflow/
     ├── envs/
-    │   └── qc_env.yaml
+    │   └── qc_env.yaml    # Conda environment housing all tools (automated installation upon first execution)
+    ├── errors/            # Error files by rules (generated upon first execution)
+    ├── logs/              # Log files by rules (generated upon first execution)
     ├── profiles/
-    │   └── config.yaml
+    │   └── config.yaml    # BIH specific SLURM config
     ├── Snakefile
-    └── logs/
-        └── errors/
+    └── utils.py    
+    
 ```
 
 To run the pipeline, you need to set up a conda environment to launch snakemake from
