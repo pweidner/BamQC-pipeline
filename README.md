@@ -12,7 +12,7 @@ git clone https://github.com/pweidner/BamQC-pipeline.git
 The pipeline currently looks like this:
 
 ```
-BamQC-BIH/
+BamQC-pipeline/
 │
 ├── config/
 │   └── config.yaml
