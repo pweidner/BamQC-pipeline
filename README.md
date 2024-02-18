@@ -1,4 +1,4 @@
-# BamQC-pipeline
+# BamQC-pipeline 🌻
 
 Snakemake workflow for automated BAM alignment statistics intended to run on the BIH cluster using SLURM scheduler for parallelization.
 
