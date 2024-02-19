@@ -1,6 +1,6 @@
 # BamQC-pipeline 🌻
 
-Snakemake workflow for automated BAM alignment statistics intended to run on the BIH cluster using SLURM scheduler for parallelization.
+Snakemake workflow for automated BAM alignment statistics intended to run on the BIH cluster using SLURM scheduler for parallelization. This pipeline will be appended by more utilities soon and for now employs [Alfred](https://github.com/tobiasrausch/alfred), an efficient and versatile command-line application that computes multi-sample quality control metrics in a read-group aware manner.
 
 ## 1. 📕 Installation
 
