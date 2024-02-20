@@ -148,6 +148,21 @@ rule extract_metrics_tables:
             "GC_metrics": []
         }
 
+        # Define the mapping between output file names and keys
+        file_to_key_mapping = {
+            "RL_metrics.tsv": "RL_metrics",
+            "BQ_metrics.tsv": "BQ_metrics",
+            "BC_metrics.tsv": "BC_metrics",
+            "MQ_metrics.tsv": "MQ_metrics",
+            "CO_metrics.tsv": "CO_metrics",
+            "CM_metrics.tsv": "CM_metrics",
+            "IS_metrics.tsv": "IS_metrics",
+            "IC_metrics.tsv": "IC_metrics",
+            "IZ_metrics.tsv": "IZ_metrics",
+            "CG_metrics.tsv": "CG_metrics",
+            "GC_metrics.tsv": "GC_metrics"
+        }
+
         # Define the zgrep and cut commands for each metric
         commands = {
             "RL_metrics_cmd": "zgrep '^RL' {} | cut -f 2-",
@@ -167,13 +182,14 @@ rule extract_metrics_tables:
         for infile in input:
             # Iterate over commands and execute them
             for key, command in commands.items():
+                # Get the corresponding output file name
+                output_file = output[key[:-4]]
                 # Execute the command and capture the output
-                output = subprocess.check_output(command.format(infile), shell=True).decode("utf-8").strip().split('\n')
+                output_data = subprocess.check_output(command.format(infile), shell=True).decode("utf-8").strip().split('\n')
                 # Add data to corresponding metrics list
-                metrics_data[key[:-5]].extend(output[1:])  # Use the key to get the metric name
+                metrics_data[file_to_key_mapping[output_file]].extend(output_data)
         
         # Write the metrics data to the output files
-        for key, data in metrics_data.items():
-            with open(output[key], 'w') as f:
+        for output_file, data in metrics_data.items():
+            with open(output_file, 'w') as f:
                 f.write('\n'.join(data))
-
