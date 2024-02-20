@@ -86,15 +86,14 @@ rule get_summary_metrics:
     output:
         summary = os.path.join(output_location, "summary_alignment_metrics.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
-        row_id = "MD"
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     run:       
         # Initialize a DataFrame to store aggregated metrics
         df = None
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_metrics(sample_file, row_id)
+            sample_metrics = extract_metrics(sample_file, "MD")
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -113,15 +112,14 @@ rule get_readlength_distributions:
     output:
         RL = os.path.join(output_location, "read_length_distributions.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
-        row_id = "MD"
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     run:
         # Initialize a DataFrame to store aggregated metrics
         df = None
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_metrics(sample_file, row_id)
+            sample_metrics = extract_metrics(sample_file, "MD")
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -141,15 +139,14 @@ rule get_mean_base_quality:
     output:
         BQ = os.path.join(output_location, "mean_base_quality.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
-        row_id = "BQ"
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     run:
         # Initialize a DataFrame to store aggregated metrics
         df = None
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_metrics(sample_file, row_id)
+            sample_metrics = extract_metrics(sample_file, "BQ")
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -170,15 +167,14 @@ rule get_base_content:
     output:
         BC = os.path.join(output_location, "base_content.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
-        row_id = "BC"
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     run:
         # Initialize a DataFrame to store aggregated metrics
         df = None
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_metrics(sample_file, row_id)
+            sample_metrics = extract_metrics(sample_file, "BC")
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -198,15 +194,14 @@ rule get_mapping_quality:
     output:
         MQ = os.path.join(output_location, "mapping_quality.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
-        row_id = "MQ"
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     run:
         # Initialize a DataFrame to store aggregated metrics
         df = None
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_metrics(sample_file, row_id)
+            sample_metrics = extract_metrics(sample_file, "MQ")
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -226,15 +221,14 @@ rule get_coverage:
     output:
         CO = os.path.join(output_location, "coverage_distributions.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
-        row_id = "CO"
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     run:
         # Initialize a DataFrame to store aggregated metrics
         df = None
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_metrics(sample_file, row_id)
+            sample_metrics = extract_metrics(sample_file, "CO")
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -254,15 +248,14 @@ rule get_chromosomal_mapping:
     output:
         CM = os.path.join(output_location, "chromosomal_mappings.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
-        row_id = "CM"
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     run:
         # Initialize a DataFrame to store aggregated metrics
         df = None
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_metrics(sample_file, row_id)
+            sample_metrics = extract_metrics(sample_file, "CM")
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -282,15 +275,14 @@ rule get_insert_size:
     output:
         IS = os.path.join(output_location, "insert_sizes.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
-        row_id = "IS"
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     run:
         # Initialize a DataFrame to store aggregated metrics
         df = None
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_metrics(sample_file, row_id)
+            sample_metrics = extract_metrics(sample_file, "IS")
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -310,15 +302,14 @@ rule get_insert_complexity:
     output:
         IC = os.path.join(output_location, "indel_context.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
-        row_id = "IC"
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     run:
         # Initialize a DataFrame to store aggregated metrics
         df = None
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_metrics(sample_file, row_id)
+            sample_metrics = extract_metrics(sample_file, "IC")
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -337,15 +328,14 @@ rule get_indel_sizes:
     output:
         IZ = os.path.join(output_location, "indel_sizes.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
-        row_id = "IZ"
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     run:
         # Initialize a DataFrame to store aggregated metrics
         df = None
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_metrics(sample_file, row_id)
+            sample_metrics = extract_metrics(sample_file, "IZ")
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -365,15 +355,14 @@ rule get_clipping:
     output:
         CG = os.path.join(output_location, "clipping.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
-        row_id = "CG"
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     run:
         # Initialize a DataFrame to store aggregated metrics
         df = None
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_metrics(sample_file, row_id)
+            sample_metrics = extract_metrics(sample_file, "CG")
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -393,15 +382,14 @@ rule get_gc_content:
     output:
         GC = os.path.join(output_location, "gc_content.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
-        row_id = "GC"
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     run:
         # Initialize a DataFrame to store aggregated metrics
         df = None
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_metrics(sample_file, row_id)
+            sample_metrics = extract_metrics(sample_file, "GC")
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
