@@ -86,7 +86,7 @@ rule get_summary_metrics:
     output:
         summary = os.path.join(output_location, "summary_alignment_metrics.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
         row_id = "MD"
     run:       
         # Initialize a DataFrame to store aggregated metrics
@@ -113,7 +113,7 @@ rule get_readlength_distributions:
     output:
         RL = os.path.join(output_location, "read_length_distributions.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
         row_id = "MD"
     run:
         # Initialize a DataFrame to store aggregated metrics
@@ -141,7 +141,7 @@ rule get_mean_base_quality:
     output:
         BQ = os.path.join(output_location, "mean_base_quality.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
         row_id = "BQ"
     run:
         # Initialize a DataFrame to store aggregated metrics
@@ -170,7 +170,7 @@ rule get_base_content:
     output:
         BC = os.path.join(output_location, "base_content.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
         row_id = "BC"
     run:
         # Initialize a DataFrame to store aggregated metrics
@@ -198,7 +198,7 @@ rule get_mapping_quality:
     output:
         MQ = os.path.join(output_location, "mapping_quality.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
         row_id = "MQ"
     run:
         # Initialize a DataFrame to store aggregated metrics
@@ -226,7 +226,7 @@ rule get_coverage:
     output:
         CO = os.path.join(output_location, "coverage_distributions.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
         row_id = "CO"
     run:
         # Initialize a DataFrame to store aggregated metrics
@@ -254,7 +254,7 @@ rule get_chromosomal_mapping:
     output:
         CM = os.path.join(output_location, "chromosomal_mappings.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
         row_id = "CM"
     run:
         # Initialize a DataFrame to store aggregated metrics
@@ -282,7 +282,7 @@ rule get_insert_size:
     output:
         IS = os.path.join(output_location, "insert_sizes.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
         row_id = "IS"
     run:
         # Initialize a DataFrame to store aggregated metrics
@@ -310,7 +310,7 @@ rule get_insert_complexity:
     output:
         IC = os.path.join(output_location, "indel_context.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
         row_id = "IC"
     run:
         # Initialize a DataFrame to store aggregated metrics
@@ -337,7 +337,7 @@ rule get_indel_sizes:
     output:
         IZ = os.path.join(output_location, "indel_sizes.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
         row_id = "IZ"
     run:
         # Initialize a DataFrame to store aggregated metrics
@@ -365,7 +365,7 @@ rule get_clipping:
     output:
         CG = os.path.join(output_location, "clipping.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
         row_id = "CG"
     run:
         # Initialize a DataFrame to store aggregated metrics
@@ -393,7 +393,7 @@ rule get_gc_content:
     output:
         GC = os.path.join(output_location, "gc_content.tsv")
     params:
-        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))],
         row_id = "GC"
     run:
         # Initialize a DataFrame to store aggregated metrics
