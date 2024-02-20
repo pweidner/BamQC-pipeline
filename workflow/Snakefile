@@ -87,12 +87,8 @@ rule get_summary_metrics:
         summary = os.path.join(output_location, "summary_alignment_metrics.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
-    run:
-        # Use zgrep and cut to extract alignment summary metrics into a temporary file
-        #tmp_file = output[0].replace(".tsv", "_tmp.tsv")
-        #zgrep_cut_cmd = f"zgrep ^ME {input} | cut -f 2- > {tmp_file}"
-        #shell(zgrep_cut_cmd)
-        
+        row_id = "MD"
+    run:       
         # Initialize a DataFrame to store aggregated metrics
         df = None
         # Iterate over individual sample files
@@ -121,17 +117,25 @@ rule get_readlength_distributions:
         RL = os.path.join(output_location, "read_length_distributions.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
-    shell:
-        """
-        # Use zgrep and cut to extract read length distributions into a temporary file
-        zgrep ^RL {input} | cut -f 2- > {output.RL}.tmp
+        row_id = "MD"
+    run:
+        # Initialize a DataFrame to store aggregated metrics
+        df = None
+        # Iterate over individual sample files
+        for sample_file in input:
+            # Extract alignment summary metrics for the current sample
+            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
+
+            # Append the sample DataFrame to the main DataFrame
+            if df is None:
+                df = sample_df
+            else:
+                # Append the second row of the DataFrame
+                df = pd.concat([df, sample_df.iloc[1:]]) 
         
-        # Remove duplicate headers from the temporary file
-        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.RL}.tmp > {output.RL}
-        
-        # Clean up temporary file
-        rm {output.RL}.tmp
-        """
+        # Write the aggregated metrics to the output file
+        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.RL), mode='a')
 
 # Rule to extract mean Base Quality distributions
 rule get_mean_base_quality:
