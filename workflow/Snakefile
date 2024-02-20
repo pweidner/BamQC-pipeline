@@ -90,6 +90,7 @@ rule get_summary_metrics:
         row_id = "MD"
     run:       
         # Initialize a DataFrame to store aggregated metrics
+        row_id = "MD"
         df = None
         # Iterate over individual sample files
         for sample_file in input:
@@ -117,6 +118,7 @@ rule get_readlength_distributions:
         row_id = "MD"
     run:
         # Initialize a DataFrame to store aggregated metrics
+        row_id = "MD"
         df = None
         # Iterate over individual sample files
         for sample_file in input:
@@ -145,6 +147,7 @@ rule get_mean_base_quality:
         row_id = "BQ"
     run:
         # Initialize a DataFrame to store aggregated metrics
+        row_id = "BQ"
         df = None
         # Iterate over individual sample files
         for sample_file in input:
@@ -174,6 +177,7 @@ rule get_base_content:
         row_id = "BC"
     run:
         # Initialize a DataFrame to store aggregated metrics
+        row_id = "BC"
         df = None
         # Iterate over individual sample files
         for sample_file in input:
@@ -202,6 +206,7 @@ rule get_mapping_quality:
         row_id = "MQ"
     run:
         # Initialize a DataFrame to store aggregated metrics
+        row_id = "MQ"
         df = None
         # Iterate over individual sample files
         for sample_file in input:
@@ -230,6 +235,7 @@ rule get_coverage:
         row_id = "CO"
     run:
         # Initialize a DataFrame to store aggregated metrics
+        row_id = "CO"
         df = None
         # Iterate over individual sample files
         for sample_file in input:
@@ -258,6 +264,7 @@ rule get_chromosomal_mapping:
         row_id = "CM"
     run:
         # Initialize a DataFrame to store aggregated metrics
+        row_id = "CM"
         df = None
         # Iterate over individual sample files
         for sample_file in input:
@@ -286,6 +293,7 @@ rule get_insert_size:
         row_id = "IS"
     run:
         # Initialize a DataFrame to store aggregated metrics
+        row_id = "IS"
         df = None
         # Iterate over individual sample files
         for sample_file in input:
@@ -314,6 +322,7 @@ rule get_insert_complexity:
         row_id = "IC"
     run:
         # Initialize a DataFrame to store aggregated metrics
+        row_id = "IC"
         df = None
         # Iterate over individual sample files
         for sample_file in input:
@@ -341,6 +350,7 @@ rule get_indel_sizes:
         row_id = "IZ"
     run:
         # Initialize a DataFrame to store aggregated metrics
+        row_id = "IZ"
         df = None
         # Iterate over individual sample files
         for sample_file in input:
@@ -369,6 +379,7 @@ rule get_clipping:
         row_id = "CG"
     run:
         # Initialize a DataFrame to store aggregated metrics
+        row_id = "CG"
         df = None
         # Iterate over individual sample files
         for sample_file in input:
@@ -397,6 +408,7 @@ rule get_gc_content:
         row_id = "GC"
     run:
         # Initialize a DataFrame to store aggregated metrics
+        row_id = "GC"
         df = None
         # Iterate over individual sample files
         for sample_file in input:
