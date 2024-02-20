@@ -119,7 +119,7 @@ rule get_readlength_distributions:
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_metrics(sample_file, "MD")
+            sample_metrics = extract_metrics(sample_file, "RL")
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -130,7 +130,7 @@ rule get_readlength_distributions:
                 df = pd.concat([df, sample_df.iloc[1:]]) 
         
         # Write the aggregated metrics to the output file
-        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.RL), mode='a')
+        df.to_csv(output.RL, sep='\t', index=False, header=not os.path.exists(output.RL), mode='a')
 
 # Rule to extract mean Base Quality distributions
 rule get_mean_base_quality:
@@ -157,7 +157,7 @@ rule get_mean_base_quality:
                 df = pd.concat([df, sample_df.iloc[1:]]) 
         
         # Write the aggregated metrics to the output file
-        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.BQ), mode='a')
+        df.to_csv(output.BQ, sep='\t', index=False, header=not os.path.exists(output.BQ), mode='a')
 
 
 # Rule to extract Base Composition distributions
@@ -185,7 +185,7 @@ rule get_base_content:
                 df = pd.concat([df, sample_df.iloc[1:]]) 
         
         # Write the aggregated metrics to the output file
-        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.BC), mode='a')
+        df.to_csv(output.BC, sep='\t', index=False, header=not os.path.exists(output.BC), mode='a')
 
 # Rule to extract Mapping Quality
 rule get_mapping_quality:
@@ -212,7 +212,7 @@ rule get_mapping_quality:
                 df = pd.concat([df, sample_df.iloc[1:]]) 
         
         # Write the aggregated metrics to the output file
-        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.MQ), mode='a')
+        df.to_csv(output.MQ, sep='\t', index=False, header=not os.path.exists(output.MQ), mode='a')
 
 # Rule to extract Coverage distributions
 rule get_coverage:
@@ -239,7 +239,7 @@ rule get_coverage:
                 df = pd.concat([df, sample_df.iloc[1:]]) 
         
         # Write the aggregated metrics to the output file
-        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.CO), mode='a')
+        df.to_csv(output.CD, sep='\t', index=False, header=not os.path.exists(output.CO), mode='a')
 
 # Rule to extract Chromosomal Mapping statistics
 rule get_chromosomal_mapping:
@@ -266,7 +266,7 @@ rule get_chromosomal_mapping:
                 df = pd.concat([df, sample_df.iloc[1:]]) 
         
         # Write the aggregated metrics to the output file
-        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.CM), mode='a')
+        df.to_csv(output.CM, sep='\t', index=False, header=not os.path.exists(output.CM), mode='a')
 
 # Rule to extract Insert Size distributions
 rule get_insert_size:
@@ -293,7 +293,7 @@ rule get_insert_size:
                 df = pd.concat([df, sample_df.iloc[1:]]) 
         
         # Write the aggregated metrics to the output file
-        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.IS), mode='a')
+        df.to_csv(output.IS, sep='\t', index=False, header=not os.path.exists(output.IS), mode='a')
 
 # Rule to extract InDel context distributions
 rule get_insert_complexity:
@@ -320,7 +320,7 @@ rule get_insert_complexity:
                 df = pd.concat([df, sample_df.iloc[1:]]) 
         
         # Write the aggregated metrics to the output file
-        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.IC), mode='a')
+        df.to_csv(output.IC, sep='\t', index=False, header=not os.path.exists(output.IC), mode='a')
 # Rule to extract InDel sizes
 rule get_indel_sizes:
     input:
@@ -346,7 +346,7 @@ rule get_indel_sizes:
                 df = pd.concat([df, sample_df.iloc[1:]]) 
         
         # Write the aggregated metrics to the output file
-        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.IZ), mode='a')
+        df.to_csv(output.IZ, sep='\t', index=False, header=not os.path.exists(output.IZ), mode='a')
 
 # Rule to extract Clipping distributions
 rule get_clipping:
@@ -373,7 +373,7 @@ rule get_clipping:
                 df = pd.concat([df, sample_df.iloc[1:]]) 
         
         # Write the aggregated metrics to the output file
-        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.CG), mode='a')
+        df.to_csv(output.CG, sep='\t', index=False, header=not os.path.exists(output.CG), mode='a')
 
 # Rule to extract GC Content distributions
 rule get_gc_content:
@@ -400,4 +400,4 @@ rule get_gc_content:
                 df = pd.concat([df, sample_df.iloc[1:]]) 
         
         # Write the aggregated metrics to the output file
-        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.GC), mode='a')
+        df.to_csv(output.GZ, sep='\t', index=False, header=not os.path.exists(output.GC), mode='a')
