@@ -80,7 +80,7 @@ rule alfred_qc:
         alfred qc -r {input.reference} -o {output.qc} {input.bam}
         """
 
-rule extract_summary_metrics:
+rule get_summary_metrics:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
@@ -114,7 +114,7 @@ rule extract_summary_metrics:
         # Remove the temporary file
         os.remove(tmp_file)
 
-rule extract_readlength_distributions:
+rule get_readlength_distributions:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
@@ -134,7 +134,7 @@ rule extract_readlength_distributions:
         """
 
 # Rule to extract mean Base Quality distributions
-rule extract_mean_base_quality:
+rule get_mean_base_quality:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
@@ -154,7 +154,7 @@ rule extract_mean_base_quality:
         """
 
 # Rule to extract Base Composition distributions
-rule extract_base_content:
+rule get_base_content:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
@@ -174,7 +174,7 @@ rule extract_base_content:
         """
 
 # Rule to extract Mapping Quality
-rule extract_mapping_quality:
+rule get_mapping_quality:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
@@ -194,7 +194,7 @@ rule extract_mapping_quality:
         """
 
 # Rule to extract Coverage distributions
-rule extract_coverage:
+rule get_coverage:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
@@ -214,7 +214,7 @@ rule extract_coverage:
         """
 
 # Rule to extract Chromosomal Mapping statistics
-rule extract_chromosomal_mapping:
+rule get_chromosomal_mapping:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
@@ -234,7 +234,7 @@ rule extract_chromosomal_mapping:
         """
 
 # Rule to extract Insert Size distributions
-rule extract_insert_size:
+rule get_insert_size:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
@@ -254,7 +254,7 @@ rule extract_insert_size:
         """
 
 # Rule to extract InDel context distributions
-rule extract_insert_complexity:
+rule get_insert_complexity:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
@@ -274,7 +274,7 @@ rule extract_insert_complexity:
         """
 
 # Rule to extract InDel sizes
-rule extract_indel_sizes:
+rule get_indel_sizes:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
@@ -294,7 +294,7 @@ rule extract_indel_sizes:
         """
 
 # Rule to extract Clipping distributions
-rule extract_clipping:
+rule get_clipping:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
@@ -314,7 +314,7 @@ rule extract_clipping:
         """
 
 # Rule to extract GC Content distributions
-rule extract_gc_content:
+rule get_gc_content:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
