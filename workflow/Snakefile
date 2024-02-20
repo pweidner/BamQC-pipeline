@@ -115,9 +115,9 @@ rule extract_readlength_distributions:
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     run:
-        # Use zgrep and cut to extract alignment summary metrics into a temporary file
+        # Use zgrep and cut to extract read length distributions into a temporary file
         tmp_file_RL = output[0].replace(".tsv", "_tmp.tsv")
-        zgrep_cut_cmd = f"zgrep ^RL {input} | cut -f 2- > {tmp_file_RL}"
+        zgrep_cut_cmd = f"zgrep ^RL {input} | awk 'FNR > 1 || NR == 1' | cut -f 2- > {tmp_file_RL}"
         shell(zgrep_cut_cmd)
         
         # Initialize a DataFrame to store aggregated metrics
