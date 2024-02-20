@@ -150,23 +150,29 @@ rule generate_metrics_tables:
             "gc_metrics": []
         }
         
+        
+        # Initialize the flag to track whether the header has been written
+        header_written = False
+        
         # Iterate over input files
         for infile in input:
-            # Iterate over each metrics and extract data
-            for metric in metrics.keys():
-                # Extract metrics data using zgrep and cut
-                zgrep_cut_cmd = f"zgrep '^{metric.upper()}' {infile} | cut -f 2-"
-                metric_data = subprocess.check_output(zgrep_cut_cmd, shell=True).decode("utf-8").strip().split('\n')
+            with gzip.open(infile, 'rt') as f:
+                # Read the content of the file
+                content = f.read()
+                # Split the content by lines
+                lines = content.strip().split('\n')
                 
-                # Add data to corresponding metrics list
-                metrics[metric].extend(metric_data)
+                # Start appending data from the second line onwards (skipping the header)
+                for line in lines[1:]:
+                    # Append the line to the corresponding metric data list
+                    metric_data[key].append(line)
         
-        # Write metrics data to output files
-        for metric, outfile in output.items():
-            with open(outfile, 'w') as f:
-                # Write header only if it's the first output file
-                if not params.header_written:
-                    f.write('\n'.join(metrics[metric]))
-                    params.header_written = True
+        # Write metric data to output files
+        for key, value in output.items():
+            with open(value, 'w') as f:
+                # Write the header only if it hasn't been written yet
+                if not header_written:
+                    f.write('\n'.join(metric_data[key]))
+                    header_written = True
                 else:
-                    f.write('\n'.join(metrics[metric][1:]))  # Exclude header
+                    f.write('\n'.join(metric_data[key])
