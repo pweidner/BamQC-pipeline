@@ -65,7 +65,7 @@ rule alfred_qc:
         bam = os.path.join(data_location, "{sample}.sort.mdup.bam"),
         reference = reference_file
     output:
-        qc = os.path.join(output_location, "{sample}.qc.tsv.gz")
+        qc = os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz")
     conda:
         "envs/qc_env.yaml"
     shell:
@@ -75,7 +75,7 @@ rule alfred_qc:
 
 rule extract_summary_metrics:
     input:
-        expand(os.path.join(output_location, "{sample}.qc.tsv.gz"), sample=samples)
+        expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
         summary = os.path.join(output_location, "summary_metrics.tsv")
     params:
@@ -109,7 +109,7 @@ rule extract_summary_metrics:
 
 rule extract_readlength_distributions:
     input:
-        expand(os.path.join(output_location, "{sample}.qc.tsv.gz"), sample=samples)
+        expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
         RL = os.path.join(output_location, "readlength_distributions.tsv")
     params:
