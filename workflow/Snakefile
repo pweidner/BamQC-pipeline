@@ -125,3 +125,203 @@ rule extract_readlength_distributions:
         # Clean up temporary file
         rm {output.RL}.tmp
         """
+
+# Rule to extract mean Base Quality distributions
+rule extract_mean_base_quality:
+    input:
+        expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
+    output:
+        BQ = os.path.join(output_location, "base_quality.tsv")
+    params:
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+    shell:
+        """
+        # Use zgrep and cut to extract mean base quality distributions into a temporary file
+        zgrep ^BQ {input} | cut -f 2- > {output.BQ}.tmp
+        
+        # Remove duplicate headers from the temporary file
+        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.BQ}.tmp > {output.BQ}
+        
+        # Clean up temporary file
+        rm {output.BQ}.tmp
+        """
+
+# Rule to extract Base Composition distributions
+rule extract_base_content:
+    input:
+        expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
+    output:
+        BC = os.path.join(output_location, "base_composition.tsv")
+    params:
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+    shell:
+        """
+        # Use zgrep and cut to extract base content distributions into a temporary file
+        zgrep ^BC {input} | cut -f 2- > {output.BC}.tmp
+        
+        # Remove duplicate headers from the temporary file
+        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.BC}.tmp > {output.BC}
+        
+        # Clean up temporary file
+        rm {output.BC}.tmp
+        """
+
+# Rule to extract Mapping Quality
+rule extract_mapping_quality:
+    input:
+        expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
+    output:
+        MQ = os.path.join(output_location, "mapping_quality.tsv")
+    params:
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+    shell:
+        """
+        # Use zgrep and cut to extract mapping quality distributions into a temporary file
+        zgrep ^MQ {input} | cut -f 2- > {output.MQ}.tmp
+        
+        # Remove duplicate headers from the temporary file
+        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.MQ}.tmp > {output.MQ}
+        
+        # Clean up temporary file
+        rm {output.MQ}.tmp
+        """
+
+# Rule to extract Coverage distributions
+rule extract_coverage:
+    input:
+        expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
+    output:
+        CO = os.path.join(output_location, "coverage.tsv")
+    params:
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+    shell:
+        """
+        # Use zgrep and cut to extract coverage distributions into a temporary file
+        zgrep ^CO {input} | cut -f 2- > {output.CO}.tmp
+        
+        # Remove duplicate headers from the temporary file
+        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.CO}.tmp > {output.CO}
+        
+        # Clean up temporary file
+        rm {output.CO}.tmp
+        """
+
+# Rule to extract Chromosomal Mapping statistics
+rule extract_chromosomal_mapping:
+    input:
+        expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
+    output:
+        CM = os.path.join(output_location, "chromosomal_mapping.tsv")
+    params:
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+    shell:
+        """
+        # Use zgrep and cut to extract chromosomal mapping distributions into a temporary file
+        zgrep ^CM {input} | cut -f 2- > {output.CM}.tmp
+        
+        # Remove duplicate headers from the temporary file
+        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.CM}.tmp > {output.CM}
+        
+        # Clean up temporary file
+        rm {output.CM}.tmp
+        """
+
+# Rule to extract Insert Size distributions
+rule extract_insert_size:
+    input:
+        expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
+    output:
+        IS = os.path.join(output_location, "insert_size.tsv")
+    params:
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+    shell:
+        """
+        # Use zgrep and cut to extract insert size distributions into a temporary file
+        zgrep ^IS {input} | cut -f 2- > {output.IS}.tmp
+        
+        # Remove duplicate headers from the temporary file
+        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.IS}.tmp > {output.IS}
+        
+        # Clean up temporary file
+        rm {output.IS}.tmp
+        """
+
+# Rule to extract InDel context distributions
+rule extract_insert_complexity:
+    input:
+        expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
+    output:
+        IC = os.path.join(output_location, "insert_complexity.tsv")
+    params:
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+    shell:
+        """
+        # Use zgrep and cut to extract InDel contesxt into a temporary file
+        zgrep ^IC {input} | cut -f 2- > {output.IC}.tmp
+        
+        # Remove duplicate headers from the temporary file
+        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.IC}.tmp > {output.IC}
+        
+        # Clean up temporary file
+        rm {output.IC}.tmp
+        """
+
+# Rule to extract InDel sizes
+rule extract_indel_sizes:
+    input:
+        expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
+    output:
+        IZ = os.path.join(output_location, "insert_size_zscore.tsv")
+    params:
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+    shell:
+        """
+        # Use zgrep and cut to extract InDel sizes  into a temporary file
+        zgrep ^IZ {input} | cut -f 2- > {output.IZ}.tmp
+        
+        # Remove duplicate headers from the temporary file
+        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.IZ}.tmp > {output.IZ}
+        
+        # Clean up temporary file
+        rm {output.IZ}.tmp
+        """
+
+# Rule to extract Clipping distributions
+rule extract_clipping:
+    input:
+        expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
+    output:
+        CG = os.path.join(output_location, "clipping.tsv")
+    params:
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+    shell:
+        """
+        # Use zgrep and cut to extract clipping into a temporary file
+        zgrep ^CG {input} | cut -f 2- > {output.CG}.tmp
+        
+        # Remove duplicate headers from the temporary file
+        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.CG}.tmp > {output.CG}
+        
+        # Clean up temporary file
+        rm {output.CG}.tmp
+        """
+
+# Rule to extract GC Content distributions
+rule extract_gc_content:
+    input:
+        expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
+    output:
+        GC = os.path.join(output_location, "gc_content.tsv")
+    params:
+        samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+    shell:
+        """
+        # Use zgrep and cut to extract GC content by sample into a temporary file
+        zgrep ^GC {input} | cut -f 2- > {output.GC}.tmp
+        
+        # Remove duplicate headers from the temporary file
+        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.GC}.tmp > {output.GC}
+        
+        # Clean up temporary file
+        rm {output.GC}.tmp
+        """
