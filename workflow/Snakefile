@@ -120,7 +120,7 @@ rule extract_readlength_distributions:
         zgrep ^RL {input} | cut -f 2- > {output.RL}.tmp
         
         # Remove duplicate headers from the temporary file
-        awk 'NR==1 || $0 != header {header=$0; print}' {output.RL}.tmp > {output.RL}
+        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.RL}.tmp > {output.RL}
         
         # Clean up temporary file
         rm {output.RL}.tmp
