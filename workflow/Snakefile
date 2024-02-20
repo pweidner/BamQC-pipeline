@@ -51,18 +51,8 @@ rule all:
     Collect all sample QC files as final outputs
     """ 
     input:    
-        os.path.join(output_location, "alignment_summary_metrics.tsv"),
-        os.path.join(output_location, "RL_metrics.tsv"),
-        os.path.join(output_location, "BQ_metrics.tsv"),
-        os.path.join(output_location, "BC_metrics.tsv"),
-        os.path.join(output_location, "MQ_metrics.tsv"),
-        os.path.join(output_location, "CO_metrics.tsv"),
-        os.path.join(output_location, "CM_metrics.tsv"),
-        os.path.join(output_location, "IS_metrics.tsv"),
-        os.path.join(output_location, "IC_metrics.tsv"),
-        os.path.join(output_location, "IZ_metrics.tsv"),
-        os.path.join(output_location, "CG_metrics.tsv"),
-        os.path.join(output_location, "GC_metrics.tsv")
+        os.path.join(output_location, "summary_metrics.tsv"),
+        os.path.join(output_location, "readlength_distributions.tsv")
 
 # Print the expand function to debug
 print("Expanding input files with the following pattern:")
@@ -87,7 +77,7 @@ rule extract_summary_metrics:
     input:
         expand(os.path.join(output_location, "{sample}.qc.tsv.gz"), sample=samples)
     output:
-        summary = os.path.join(output_location, "alignment_summary_metrics.tsv")
+        summary = os.path.join(output_location, "summary_metrics.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     run:
