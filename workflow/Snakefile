@@ -48,16 +48,16 @@ samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.pat
 # Rule to generate all outputs for the pipeline
 rule all:
     input:
-        os.path.join(output_location, "summary_metrics.tsv"),
-        os.path.join(output_location, "readlength.tsv"),
-        os.path.join(output_location, "base_quality.tsv"),
+        os.path.join(output_location, "summary_alignment_metrics.tsv"),
+        os.path.join(output_location, "read_length_distributions.tsv"),
+        os.path.join(output_location, "mean_base_quality.tsv"),
         os.path.join(output_location, "base_content.tsv"),
         os.path.join(output_location, "mapping_quality.tsv"),
-        os.path.join(output_location, "coverage.tsv"),
-        os.path.join(output_location, "chromosomal_mapping.tsv"),
-        os.path.join(output_location, "insert_size.tsv"),
-        os.path.join(output_location, "insert_complexity.tsv"),
-        os.path.join(output_location, "insert_size_zscore.tsv"),
+        os.path.join(output_location, "coverage_distributions.tsv"),
+        os.path.join(output_location, "chromosomal_mappings.tsv"),
+        os.path.join(output_location, "insert_sizes.tsv"),
+        os.path.join(output_location, "indel_context.tsv"),
+        os.path.join(output_location, "indel_sizes.tsv"),
         os.path.join(output_location, "clipping.tsv"),
         os.path.join(output_location, "gc_content.tsv")
 
@@ -84,7 +84,7 @@ rule extract_summary_metrics:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
-        summary = os.path.join(output_location, "summary_metrics.tsv")
+        summary = os.path.join(output_location, "summary_alignment_metrics.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     run:
@@ -118,7 +118,7 @@ rule extract_readlength_distributions:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
-        RL = os.path.join(output_location, "readlength_distributions.tsv")
+        RL = os.path.join(output_location, "read_length_distributions.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     shell:
@@ -138,7 +138,7 @@ rule extract_mean_base_quality:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
-        BQ = os.path.join(output_location, "base_quality.tsv")
+        BQ = os.path.join(output_location, "mean_base_quality.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     shell:
@@ -158,7 +158,7 @@ rule extract_base_content:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
-        BC = os.path.join(output_location, "base_composition.tsv")
+        BC = os.path.join(output_location, "base_content.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     shell:
@@ -198,7 +198,7 @@ rule extract_coverage:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
-        CO = os.path.join(output_location, "coverage.tsv")
+        CO = os.path.join(output_location, "coverage_distributions.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     shell:
@@ -218,7 +218,7 @@ rule extract_chromosomal_mapping:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
-        CM = os.path.join(output_location, "chromosomal_mapping.tsv")
+        CM = os.path.join(output_location, "chromosomal_mappings.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     shell:
@@ -238,7 +238,7 @@ rule extract_insert_size:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
-        IS = os.path.join(output_location, "insert_size.tsv")
+        IS = os.path.join(output_location, "insert_sizes.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     shell:
@@ -258,7 +258,7 @@ rule extract_insert_complexity:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
-        IC = os.path.join(output_location, "insert_complexity.tsv")
+        IC = os.path.join(output_location, "indel_context.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     shell:
@@ -278,7 +278,7 @@ rule extract_indel_sizes:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
     output:
-        IZ = os.path.join(output_location, "insert_size_zscore.tsv")
+        IZ = os.path.join(output_location, "indel_sizes.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     shell:
