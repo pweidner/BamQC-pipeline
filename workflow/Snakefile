@@ -169,14 +169,11 @@ rule extract_metrics_tables:
             for key, command in commands.items():
                 # Execute the command and capture the output
                 output = subprocess.check_output(command.format(infile), shell=True).decode("utf-8").strip().split('\n')
-                # If the header hasn't been written yet, write it to the output file
-                if not metrics_data[key]:
-                    metrics_data[key].extend(output)
-                else:
-                    # Append the data (excluding the header) to the output file
-                    metrics_data[key].extend(output[1:])
+                # Add data to corresponding metrics list
+                metrics_data[key[:-5]].extend(output[1:])  # Use the key to get the metric name
         
         # Write the metrics data to the output files
         for key, data in metrics_data.items():
             with open(output[key], 'w') as f:
                 f.write('\n'.join(data))
+
