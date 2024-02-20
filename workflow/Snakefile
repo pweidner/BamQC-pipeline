@@ -50,7 +50,19 @@ rule all:
     Collect all sample QC files as final outputs
     """ 
     input:    
-        os.path.join(output_location, "alignment_summary_metrics.tsv")
+        os.path.join(output_location, "alignment_summary_metrics.tsv"),
+        os.path.join(output_location, "rl_metrics.tsv"),
+        os.path.join(output_location, "bq_metrics.tsv"),
+        os.path.join(output_location, "bc_metrics.tsv"),
+        os.path.join(output_location, "mq_metrics.tsv"),
+        os.path.join(output_location, "co_metrics.tsv"),
+        os.path.join(output_location, "cm_metrics.tsv"),
+        os.path.join(output_location, "is_metrics.tsv"),
+        os.path.join(output_location, "ic_metrics.tsv"),
+        os.path.join(output_location, "iz_metrics.tsv"),
+        os.path.join(output_location, "cg_metrics.tsv"),
+        os.path.join(output_location, "gc_metrics.tsv")
+
 
 # Print the expand function to debug
 print("Expanding input files with the following pattern:")
@@ -63,7 +75,7 @@ rule alfred_qc:
         bam = os.path.join(data_location, "{sample}.sort.mdup.bam"),
         reference = reference_file
     output:
-        qc = os.path.join(output_location, "{sample}.qc.tsv.gz")
+        qc = os.path.join(output_location, "stats-by-lib", "{sample}.qc.tsv.gz")
     conda:
         "envs/qc_env.yaml"
     shell:
@@ -73,7 +85,7 @@ rule alfred_qc:
 
 rule aggregate_alignment_metrics:
     input:
-        expand(os.path.join(output_location, "{sample}.qc.tsv.gz"), sample=samples)
+        expand(os.path.join(output_location, "stats-by-lib", "{sample}.qc.tsv.gz"), sample=samples)
     output:
         summary = os.path.join(output_location, "alignment_summary_metrics.tsv")
     params:
@@ -104,3 +116,57 @@ rule aggregate_alignment_metrics:
 
         # Remove the temporary file
         os.remove(tmp_file)
+
+rule generate_metrics_tables:
+    input:
+        expand(os.path.join(output_location, "stats-by-lib", "{sample}.qc.tsv.gz"), sample=samples)
+    output:
+        rl_metrics = os.path.join(output_location, "rl_metrics.tsv"),
+        bq_metrics = os.path.join(output_location, "bq_metrics.tsv"),
+        bc_metrics = os.path.join(output_location, "bc_metrics.tsv"),
+        mq_metrics = os.path.join(output_location, "mq_metrics.tsv"),
+        co_metrics = os.path.join(output_location, "co_metrics.tsv"),
+        cm_metrics = os.path.join(output_location, "cm_metrics.tsv"),
+        is_metrics = os.path.join(output_location, "is_metrics.tsv"),
+        ic_metrics = os.path.join(output_location, "ic_metrics.tsv"),
+        iz_metrics = os.path.join(output_location, "iz_metrics.tsv"),
+        cg_metrics = os.path.join(output_location, "cg_metrics.tsv"),
+        gc_metrics = os.path.join(output_location, "gc_metrics.tsv")
+    params:
+        header_written = False  # Flag to check if header has been written
+    run:
+        # Initialize dictionaries to store metrics data
+        metrics = {
+            "rl_metrics": [],
+            "bq_metrics": [],
+            "bc_metrics": [],
+            "mq_metrics": [],
+            "co_metrics": [],
+            "cm_metrics": [],
+            "is_metrics": [],
+            "ic_metrics": [],
+            "iz_metrics": [],
+            "cg_metrics": [],
+            "gc_metrics": []
+        }
+        
+        # Iterate over input files
+        for infile in input:
+            # Iterate over each metrics and extract data
+            for metric in metrics.keys():
+                # Extract metrics data using zgrep and cut
+                zgrep_cut_cmd = f"zgrep '^{metric.upper()}' {infile} | cut -f 2-"
+                metric_data = subprocess.check_output(zgrep_cut_cmd, shell=True).decode("utf-8").strip().split('\n')
+                
+                # Add data to corresponding metrics list
+                metrics[metric].extend(metric_data)
+        
+        # Write metrics data to output files
+        for metric, outfile in output.items():
+            with open(outfile, 'w') as f:
+                # Write header only if it's the first output file
+                if not params.header_written:
+                    f.write('\n'.join(metrics[metric]))
+                    params.header_written = True
+                else:
+                    f.write('\n'.join(metrics[metric][1:]))  # Exclude header
