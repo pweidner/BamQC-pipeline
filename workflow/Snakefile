@@ -5,7 +5,7 @@ import gzip
 import subprocess
 import yaml
 import pandas as pd
-from utils import extract_alignment_metrics
+from utils import extract_metrics
 
 #ASCII art for BamQC-BIH
 print(r"""
@@ -94,7 +94,7 @@ rule get_summary_metrics:
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_metrics = extract_metrics(sample_file)
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -121,7 +121,7 @@ rule get_readlength_distributions:
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_metrics = extract_metrics(sample_file)
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -149,7 +149,7 @@ rule get_mean_base_quality:
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_metrics = extract_metrics(sample_file)
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -178,7 +178,7 @@ rule get_base_content:
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_metrics = extract_metrics(sample_file)
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -206,7 +206,7 @@ rule get_mapping_quality:
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_metrics = extract_metrics(sample_file)
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -234,7 +234,7 @@ rule get_coverage:
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_metrics = extract_metrics(sample_file)
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -262,7 +262,7 @@ rule get_chromosomal_mapping:
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_metrics = extract_metrics(sample_file)
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -290,7 +290,7 @@ rule get_insert_size:
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_metrics = extract_metrics(sample_file)
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -318,7 +318,7 @@ rule get_insert_complexity:
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_metrics = extract_metrics(sample_file)
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -345,7 +345,7 @@ rule get_indel_sizes:
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_metrics = extract_metrics(sample_file)
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -373,7 +373,7 @@ rule get_clipping:
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_metrics = extract_metrics(sample_file)
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
@@ -401,7 +401,7 @@ rule get_gc_content:
         # Iterate over individual sample files
         for sample_file in input:
             # Extract alignment summary metrics for the current sample
-            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_metrics = extract_metrics(sample_file)
             sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
             # Append the sample DataFrame to the main DataFrame
