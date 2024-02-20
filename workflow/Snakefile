@@ -1,6 +1,7 @@
 # Import necessary modules
 import os
 import glob
+import gzip
 import subprocess
 import yaml
 import pandas as pd
