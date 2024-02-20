@@ -51,18 +51,17 @@ rule all:
     """ 
     input:    
         os.path.join(output_location, "alignment_summary_metrics.tsv"),
-        os.path.join(output_location, "rl_metrics.tsv"),
-        os.path.join(output_location, "bq_metrics.tsv"),
-        os.path.join(output_location, "bc_metrics.tsv"),
-        os.path.join(output_location, "mq_metrics.tsv"),
-        os.path.join(output_location, "co_metrics.tsv"),
-        os.path.join(output_location, "cm_metrics.tsv"),
-        os.path.join(output_location, "is_metrics.tsv"),
-        os.path.join(output_location, "ic_metrics.tsv"),
-        os.path.join(output_location, "iz_metrics.tsv"),
-        os.path.join(output_location, "cg_metrics.tsv"),
-        os.path.join(output_location, "gc_metrics.tsv")
-
+        os.path.join(output_location, "RL_metrics.tsv"),
+        os.path.join(output_location, "BQ_metrics.tsv"),
+        os.path.join(output_location, "BC_metrics.tsv"),
+        os.path.join(output_location, "MQ_metrics.tsv"),
+        os.path.join(output_location, "CO_metrics.tsv"),
+        os.path.join(output_location, "CM_metrics.tsv"),
+        os.path.join(output_location, "IS_metrics.tsv"),
+        os.path.join(output_location, "IC_metrics.tsv"),
+        os.path.join(output_location, "IZ_metrics.tsv"),
+        os.path.join(output_location, "CG_metrics.tsv"),
+        os.path.join(output_location, "GC_metrics.tsv")
 
 # Print the expand function to debug
 print("Expanding input files with the following pattern:")
@@ -117,62 +116,67 @@ rule aggregate_alignment_metrics:
         # Remove the temporary file
         os.remove(tmp_file)
 
-rule generate_metrics_tables:
+# Rule to extract tables for each metric from Alfred QC output files
+rule extract_metrics_tables:
     input:
         expand(os.path.join(output_location, "stats-by-lib", "{sample}.qc.tsv.gz"), sample=samples)
     output:
-        rl_metrics = os.path.join(output_location, "rl_metrics.tsv"),
-        bq_metrics = os.path.join(output_location, "bq_metrics.tsv"),
-        bc_metrics = os.path.join(output_location, "bc_metrics.tsv"),
-        mq_metrics = os.path.join(output_location, "mq_metrics.tsv"),
-        co_metrics = os.path.join(output_location, "co_metrics.tsv"),
-        cm_metrics = os.path.join(output_location, "cm_metrics.tsv"),
-        is_metrics = os.path.join(output_location, "is_metrics.tsv"),
-        ic_metrics = os.path.join(output_location, "ic_metrics.tsv"),
-        iz_metrics = os.path.join(output_location, "iz_metrics.tsv"),
-        cg_metrics = os.path.join(output_location, "cg_metrics.tsv"),
-        gc_metrics = os.path.join(output_location, "gc_metrics.tsv")
-    params:
-        header_written = False  # Flag to check if header has been written
+        RL_metrics = os.path.join(output_location, "RL_metrics.tsv"),
+        BQ_metrics = os.path.join(output_location, "BQ_metrics.tsv"),
+        BC_metrics = os.path.join(output_location, "BC_metrics.tsv"),
+        MQ_metrics = os.path.join(output_location, "MQ_metrics.tsv"),
+        CO_metrics = os.path.join(output_location, "CO_metrics.tsv"),
+        CM_metrics = os.path.join(output_location, "CM_metrics.tsv"),
+        IS_metrics = os.path.join(output_location, "IS_metrics.tsv"),
+        IC_metrics = os.path.join(output_location, "IC_metrics.tsv"),
+        IZ_metrics = os.path.join(output_location, "IZ_metrics.tsv"),
+        CG_metrics = os.path.join(output_location, "CG_metrics.tsv"),
+        GC_metrics = os.path.join(output_location, "GC_metrics.tsv")
     run:
         # Initialize dictionaries to store metrics data
-        metrics = {
-            "rl_metrics": [],
-            "bq_metrics": [],
-            "bc_metrics": [],
-            "mq_metrics": [],
-            "co_metrics": [],
-            "cm_metrics": [],
-            "is_metrics": [],
-            "ic_metrics": [],
-            "iz_metrics": [],
-            "cg_metrics": [],
-            "gc_metrics": []
+        metrics_data = {
+            "RL_metrics": [],
+            "BQ_metrics": [],
+            "BC_metrics": [],
+            "MQ_metrics": [],
+            "CO_metrics": [],
+            "CM_metrics": [],
+            "IS_metrics": [],
+            "IC_metrics": [],
+            "IZ_metrics": [],
+            "CG_metrics": [],
+            "GC_metrics": []
         }
-        
-        
-        # Initialize the flag to track whether the header has been written
-        header_written = False
+
+        # Define the zgrep and cut commands for each metric
+        commands = {
+            "RL_metrics_cmd": "zgrep '^RL' {} | cut -f 2-",
+            "BQ_metrics_cmd": "zgrep '^BQ' {} | cut -f 2-",
+            "BC_metrics_cmd": "zgrep '^BC' {} | cut -f 2-",
+            "MQ_metrics_cmd": "zgrep '^MQ' {} | cut -f 2-",
+            "CO_metrics_cmd": "zgrep '^CO' {} | cut -f 2-",
+            "CM_metrics_cmd": "zgrep '^CM' {} | cut -f 2-",
+            "IS_metrics_cmd": "zgrep '^IS' {} | cut -f 2-",
+            "IC_metrics_cmd": "zgrep '^IC' {} | cut -f 2-",
+            "IZ_metrics_cmd": "zgrep '^IZ' {} | cut -f 2-",
+            "CG_metrics_cmd": "zgrep '^CG' {} | cut -f 2-",
+            "GC_metrics_cmd": "zgrep '^GC' {} | cut -f 2-"
+        }
         
         # Iterate over input files
         for infile in input:
-            with gzip.open(infile, 'rt') as f:
-                # Read the content of the file
-                content = f.read()
-                # Split the content by lines
-                lines = content.strip().split('\n')
-                
-                # Start appending data from the second line onwards (skipping the header)
-                for line in lines[1:]:
-                    # Append the line to the corresponding metric data list
-                    metric_data[key].append(line)
-        
-        # Write metric data to output files
-        for key, value in output.items():
-            with open(value, 'w') as f:
-                # Write the header only if it hasn't been written yet
-                if not header_written:
-                    f.write('\n'.join(metric_data[key]))
-                    header_written = True
+            # Iterate over commands and execute them
+            for key, command in commands.items():
+                # Execute the command and capture the output
+                output = subprocess.check_output(command.format(infile), shell=True).decode("utf-8").strip().split('\n')
+                # If the header hasn't been written yet, write it to the output file
+                if not metrics_data[key]:
+                    metrics_data[key].extend(output)
                 else:
-                    f.write('\n'.join(metric_data[key])
+                    # Append the data (excluding the header) to the output file
+                    metrics_data[key].extend(output[1:])
+        
+        # Write the metrics data to the output files
+        for key, data in metrics_data.items():
+            with open(output[key], 'w') as f:
+                f.write('\n'.join(data))
