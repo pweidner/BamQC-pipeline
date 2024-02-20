@@ -1,7 +1,5 @@
 import subprocess
 
-import subprocess
-
 def extract_alignment_metrics(tsv_file):
     # Use zgrep and cut to extract alignment summary metrics
     grep_process = subprocess.Popen(['zgrep', '^ME', tsv_file], stdout=subprocess.PIPE)
