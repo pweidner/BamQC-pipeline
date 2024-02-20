@@ -89,9 +89,9 @@ rule get_summary_metrics:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
     run:
         # Use zgrep and cut to extract alignment summary metrics into a temporary file
-        tmp_file = output[0].replace(".tsv", "_tmp.tsv")
-        zgrep_cut_cmd = f"zgrep ^ME {input} | cut -f 2- > {tmp_file}"
-        shell(zgrep_cut_cmd)
+        #tmp_file = output[0].replace(".tsv", "_tmp.tsv")
+        #zgrep_cut_cmd = f"zgrep ^ME {input} | cut -f 2- > {tmp_file}"
+        #shell(zgrep_cut_cmd)
         
         # Initialize a DataFrame to store aggregated metrics
         df = None
