@@ -107,9 +107,6 @@ rule get_summary_metrics:
         # Write the aggregated metrics to the output file
         df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.summary), mode='a')
 
-        # Remove the temporary file
-        os.remove(tmp_file)
-
 rule get_readlength_distributions:
     input:
         expand(os.path.join(output_location, "metrics-per-sample", "{sample}.qc.tsv.gz"), sample=samples)
@@ -145,17 +142,26 @@ rule get_mean_base_quality:
         BQ = os.path.join(output_location, "mean_base_quality.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
-    shell:
-        """
-        # Use zgrep and cut to extract mean base quality distributions into a temporary file
-        zgrep ^BQ {input} | cut -f 2- > {output.BQ}.tmp
+        row_id = "BQ"
+    run:
+        # Initialize a DataFrame to store aggregated metrics
+        df = None
+        # Iterate over individual sample files
+        for sample_file in input:
+            # Extract alignment summary metrics for the current sample
+            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
+
+            # Append the sample DataFrame to the main DataFrame
+            if df is None:
+                df = sample_df
+            else:
+                # Append the second row of the DataFrame
+                df = pd.concat([df, sample_df.iloc[1:]]) 
         
-        # Remove duplicate headers from the temporary file
-        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.BQ}.tmp > {output.BQ}
-        
-        # Clean up temporary file
-        rm {output.BQ}.tmp
-        """
+        # Write the aggregated metrics to the output file
+        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.BQ), mode='a')
+
 
 # Rule to extract Base Composition distributions
 rule get_base_content:
@@ -165,17 +171,25 @@ rule get_base_content:
         BC = os.path.join(output_location, "base_content.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
-    shell:
-        """
-        # Use zgrep and cut to extract base content distributions into a temporary file
-        zgrep ^BC {input} | cut -f 2- > {output.BC}.tmp
+        row_id = "BC"
+    run:
+        # Initialize a DataFrame to store aggregated metrics
+        df = None
+        # Iterate over individual sample files
+        for sample_file in input:
+            # Extract alignment summary metrics for the current sample
+            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
+
+            # Append the sample DataFrame to the main DataFrame
+            if df is None:
+                df = sample_df
+            else:
+                # Append the second row of the DataFrame
+                df = pd.concat([df, sample_df.iloc[1:]]) 
         
-        # Remove duplicate headers from the temporary file
-        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.BC}.tmp > {output.BC}
-        
-        # Clean up temporary file
-        rm {output.BC}.tmp
-        """
+        # Write the aggregated metrics to the output file
+        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.BC), mode='a')
 
 # Rule to extract Mapping Quality
 rule get_mapping_quality:
@@ -185,17 +199,25 @@ rule get_mapping_quality:
         MQ = os.path.join(output_location, "mapping_quality.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
-    shell:
-        """
-        # Use zgrep and cut to extract mapping quality distributions into a temporary file
-        zgrep ^MQ {input} | cut -f 2- > {output.MQ}.tmp
+        row_id = "MQ"
+    run:
+        # Initialize a DataFrame to store aggregated metrics
+        df = None
+        # Iterate over individual sample files
+        for sample_file in input:
+            # Extract alignment summary metrics for the current sample
+            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
+
+            # Append the sample DataFrame to the main DataFrame
+            if df is None:
+                df = sample_df
+            else:
+                # Append the second row of the DataFrame
+                df = pd.concat([df, sample_df.iloc[1:]]) 
         
-        # Remove duplicate headers from the temporary file
-        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.MQ}.tmp > {output.MQ}
-        
-        # Clean up temporary file
-        rm {output.MQ}.tmp
-        """
+        # Write the aggregated metrics to the output file
+        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.MQ), mode='a')
 
 # Rule to extract Coverage distributions
 rule get_coverage:
@@ -205,17 +227,25 @@ rule get_coverage:
         CO = os.path.join(output_location, "coverage_distributions.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
-    shell:
-        """
-        # Use zgrep and cut to extract coverage distributions into a temporary file
-        zgrep ^CO {input} | cut -f 2- > {output.CO}.tmp
+        row_id = "CO"
+    run:
+        # Initialize a DataFrame to store aggregated metrics
+        df = None
+        # Iterate over individual sample files
+        for sample_file in input:
+            # Extract alignment summary metrics for the current sample
+            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
+
+            # Append the sample DataFrame to the main DataFrame
+            if df is None:
+                df = sample_df
+            else:
+                # Append the second row of the DataFrame
+                df = pd.concat([df, sample_df.iloc[1:]]) 
         
-        # Remove duplicate headers from the temporary file
-        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.CO}.tmp > {output.CO}
-        
-        # Clean up temporary file
-        rm {output.CO}.tmp
-        """
+        # Write the aggregated metrics to the output file
+        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.CO), mode='a')
 
 # Rule to extract Chromosomal Mapping statistics
 rule get_chromosomal_mapping:
@@ -225,17 +255,25 @@ rule get_chromosomal_mapping:
         CM = os.path.join(output_location, "chromosomal_mappings.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
-    shell:
-        """
-        # Use zgrep and cut to extract chromosomal mapping distributions into a temporary file
-        zgrep ^CM {input} | cut -f 2- > {output.CM}.tmp
+        row_id = "CM"
+    run:
+        # Initialize a DataFrame to store aggregated metrics
+        df = None
+        # Iterate over individual sample files
+        for sample_file in input:
+            # Extract alignment summary metrics for the current sample
+            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
+
+            # Append the sample DataFrame to the main DataFrame
+            if df is None:
+                df = sample_df
+            else:
+                # Append the second row of the DataFrame
+                df = pd.concat([df, sample_df.iloc[1:]]) 
         
-        # Remove duplicate headers from the temporary file
-        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.CM}.tmp > {output.CM}
-        
-        # Clean up temporary file
-        rm {output.CM}.tmp
-        """
+        # Write the aggregated metrics to the output file
+        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.CM), mode='a')
 
 # Rule to extract Insert Size distributions
 rule get_insert_size:
@@ -245,17 +283,25 @@ rule get_insert_size:
         IS = os.path.join(output_location, "insert_sizes.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
-    shell:
-        """
-        # Use zgrep and cut to extract insert size distributions into a temporary file
-        zgrep ^IS {input} | cut -f 2- > {output.IS}.tmp
+        row_id = "IS"
+    run:
+        # Initialize a DataFrame to store aggregated metrics
+        df = None
+        # Iterate over individual sample files
+        for sample_file in input:
+            # Extract alignment summary metrics for the current sample
+            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
+
+            # Append the sample DataFrame to the main DataFrame
+            if df is None:
+                df = sample_df
+            else:
+                # Append the second row of the DataFrame
+                df = pd.concat([df, sample_df.iloc[1:]]) 
         
-        # Remove duplicate headers from the temporary file
-        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.IS}.tmp > {output.IS}
-        
-        # Clean up temporary file
-        rm {output.IS}.tmp
-        """
+        # Write the aggregated metrics to the output file
+        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.IS), mode='a')
 
 # Rule to extract InDel context distributions
 rule get_insert_complexity:
@@ -265,18 +311,25 @@ rule get_insert_complexity:
         IC = os.path.join(output_location, "indel_context.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
-    shell:
-        """
-        # Use zgrep and cut to extract InDel contesxt into a temporary file
-        zgrep ^IC {input} | cut -f 2- > {output.IC}.tmp
-        
-        # Remove duplicate headers from the temporary file
-        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.IC}.tmp > {output.IC}
-        
-        # Clean up temporary file
-        rm {output.IC}.tmp
-        """
+        row_id = "IC"
+    run:
+        # Initialize a DataFrame to store aggregated metrics
+        df = None
+        # Iterate over individual sample files
+        for sample_file in input:
+            # Extract alignment summary metrics for the current sample
+            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
 
+            # Append the sample DataFrame to the main DataFrame
+            if df is None:
+                df = sample_df
+            else:
+                # Append the second row of the DataFrame
+                df = pd.concat([df, sample_df.iloc[1:]]) 
+        
+        # Write the aggregated metrics to the output file
+        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.IC), mode='a')
 # Rule to extract InDel sizes
 rule get_indel_sizes:
     input:
@@ -285,17 +338,25 @@ rule get_indel_sizes:
         IZ = os.path.join(output_location, "indel_sizes.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
-    shell:
-        """
-        # Use zgrep and cut to extract InDel sizes  into a temporary file
-        zgrep ^IZ {input} | cut -f 2- > {output.IZ}.tmp
+        row_id = "IZ"
+    run:
+        # Initialize a DataFrame to store aggregated metrics
+        df = None
+        # Iterate over individual sample files
+        for sample_file in input:
+            # Extract alignment summary metrics for the current sample
+            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
+
+            # Append the sample DataFrame to the main DataFrame
+            if df is None:
+                df = sample_df
+            else:
+                # Append the second row of the DataFrame
+                df = pd.concat([df, sample_df.iloc[1:]]) 
         
-        # Remove duplicate headers from the temporary file
-        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.IZ}.tmp > {output.IZ}
-        
-        # Clean up temporary file
-        rm {output.IZ}.tmp
-        """
+        # Write the aggregated metrics to the output file
+        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.IZ), mode='a')
 
 # Rule to extract Clipping distributions
 rule get_clipping:
@@ -305,17 +366,25 @@ rule get_clipping:
         CG = os.path.join(output_location, "clipping.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
-    shell:
-        """
-        # Use zgrep and cut to extract clipping into a temporary file
-        zgrep ^CG {input} | cut -f 2- > {output.CG}.tmp
+        row_id = "CG"
+    run:
+        # Initialize a DataFrame to store aggregated metrics
+        df = None
+        # Iterate over individual sample files
+        for sample_file in input:
+            # Extract alignment summary metrics for the current sample
+            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
+
+            # Append the sample DataFrame to the main DataFrame
+            if df is None:
+                df = sample_df
+            else:
+                # Append the second row of the DataFrame
+                df = pd.concat([df, sample_df.iloc[1:]]) 
         
-        # Remove duplicate headers from the temporary file
-        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.CG}.tmp > {output.CG}
-        
-        # Clean up temporary file
-        rm {output.CG}.tmp
-        """
+        # Write the aggregated metrics to the output file
+        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.CG), mode='a')
 
 # Rule to extract GC Content distributions
 rule get_gc_content:
@@ -325,14 +394,22 @@ rule get_gc_content:
         GC = os.path.join(output_location, "gc_content.tsv")
     params:
         samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
-    shell:
-        """
-        # Use zgrep and cut to extract GC content by sample into a temporary file
-        zgrep ^GC {input} | cut -f 2- > {output.GC}.tmp
+        row_id = "GC"
+    run:
+        # Initialize a DataFrame to store aggregated metrics
+        df = None
+        # Iterate over individual sample files
+        for sample_file in input:
+            # Extract alignment summary metrics for the current sample
+            sample_metrics = extract_alignment_metrics(sample_file)
+            sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index")
+
+            # Append the sample DataFrame to the main DataFrame
+            if df is None:
+                df = sample_df
+            else:
+                # Append the second row of the DataFrame
+                df = pd.concat([df, sample_df.iloc[1:]]) 
         
-        # Remove duplicate headers from the temporary file
-        awk 'NR==1 || $0 != header {{header=$0; print}}' {output.GC}.tmp > {output.GC}
-        
-        # Clean up temporary file
-        rm {output.GC}.tmp
-        """
+        # Write the aggregated metrics to the output file
+        df.to_csv(output.summary, sep='\t', index=False, header=not os.path.exists(output.GC), mode='a')
