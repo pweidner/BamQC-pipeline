@@ -119,8 +119,8 @@ rule extract_readlength_distributions:
         # Use zgrep and cut to extract read length distributions into a temporary file
         zgrep ^RL {input} | cut -f 2- > {output.RL}.tmp
         
-        # Remove duplicate lines, keeping only the first occurrence
-        awk 'NR == 1 || !seen[$0]++' {output.RL}.tmp > {output.RL}
+        # Remove duplicate headers from the temporary file
+        awk 'NR==1 || $0 != header {header=$0; print}' {tmp_file_RL} > {output[0]}
         
         # Clean up temporary file
         rm {output.RL}.tmp
