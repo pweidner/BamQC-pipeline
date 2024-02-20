@@ -2,4 +2,4 @@ data_location: "path/to/bam/folder"
 ref: "hg38"  # Specify the desired reference genome ("hg38", "mm10", or "T2T")
 output_location: "path/to/output/folder"
 default_profile: "workflow/profiles"
-reference_path: "/data/gpfs-1/users/$USER/work/mosaicatcher-pipeline-BIH/workflow/data/ref_genomes/"
+reference_path: "/data/gpfs-1/users/pweidne_m/work/mosaicatcher-pipeline-BIH/workflow/data/ref_genomes/"
