@@ -4,7 +4,7 @@ channels:
   - conda-forge
 dependencies:
   - mamba
-  - snakemake
+  - snakemake=7.32.0
   - samtools
   - alfred
   - bedtools
