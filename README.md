@@ -52,7 +52,3 @@ When first executed, the pipeline automatically installs all tools from a conda 
 `ref` -> Currently specifies the path to my personal reference files I use for alignments, should be updated to group references soon.
 
 Find a summary of the current output generated [here](workflow/Output.md).
-
-## 4. 💂‍♂️ Authors 
-
-- [Patrick Weidner](https://github.com/pweidner)
