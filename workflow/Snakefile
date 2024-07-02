@@ -50,7 +50,7 @@ rule all:
     Collect all sample QC files as final outputs
     """ 
     input:    
-        os.path.join(output_location, "alignment_summary_metrics.tsv")
+        os.path.join(output_location, "alignment_summary_metrics_cleaned.tsv")
 
 # Print the expand function to debug
 print("Expanding input files with the following pattern:")
@@ -104,3 +104,15 @@ rule aggregate_alignment_metrics:
 
         # Remove the temporary file
         os.remove(tmp_file)
+
+# Rule to clean up the alignment summary metrics file
+rule clean_up_table:
+    input:
+        os.path.join(output_location, "alignment_summary_metrics.tsv")
+    output:
+        os.path.join(output_location, "alignment_summary_metrics_cleaned.tsv")
+    shell:
+        """
+        tail -n +2 {input} > {output}
+        mv {output} {input}
+        """
