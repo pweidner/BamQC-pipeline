@@ -39,7 +39,7 @@ print(f"- Reference Genome: \033[1;33m{ref}\033[0m")
 print("")
 
 # Define the file path to the reference genomes
-reference_file = os.path.join(reference_path, f"{ref}.fa")
+reference_file = os.path.join(reference_path, f"{ref}")
 
 # Define the list of samples based on the input BAM files
 samples = [os.path.basename(sample).split(".")[0] for sample in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
