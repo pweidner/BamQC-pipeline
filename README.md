@@ -45,10 +45,10 @@ conda activate snakemake
 Once inside the repo, you can launch any number of runs from here on I/O folders (e.g. from within a dedicated screen session):
 
 ```bash
-snakemake --config ref=hg38 data_location=/path/to/bamdir output_location=/path/to/outputdir --profile workflow/profiles
+snakemake --config ref=/path/to/hg38 data_location=/path/to/bamdir output_location=/path/to/outputdir --profile workflow/profiles
 ```
 When first executed, the pipeline automatically installs all tools from a conda qc_env.yaml, which can be reused for any other runs.
 
-`ref` -> Currently specifies the path to my personal reference files I use for alignments, should be updated to group references soon.
+`ref` -> Currently specifies the path to my personal reference files I use for alignments, should be updated to group references soon (without the .fa ending).
 
 Find a summary of the current output generated [here](workflow/Output.md).
