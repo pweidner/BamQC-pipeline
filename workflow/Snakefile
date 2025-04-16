@@ -98,32 +98,39 @@ rule aggregate_alignment_metrics:
     run:
         import pandas as pd
         import os
-        
-        rows = []  # list to store each sample's metrics as a dict
-        
-        # Loop over each QC file
+
+        # List to store each sample's QC metrics as a dict.
+        all_samples = []
+
         for qc_file in input.qc_files:
-            # Extract the sample identifier from the filename.
-            # Assumes file naming like <sample>.qc.tsv.gz, adjust if necessary.
+            # Extract the sample identifier.
             sample_id = os.path.basename(qc_file).split(".qc.tsv")[0]
             try:
-                sample_metrics = extract_alignment_metrics(qc_file)
+                result = extract_alignment_metrics(qc_file)
             except Exception as e:
                 print(f"Error processing {qc_file}: {e}")
                 continue
-            
-            # Add the sample identifier as a key-value pair.
+
+            # Check if the result is already a dict.
+            if isinstance(result, dict):
+                sample_metrics = result
+            else:
+                # Assume the result is a tuple: (headers, values)
+                headers, values = result
+                sample_metrics = dict(zip(headers, values))
+
+            # Ensure the sample (library) name is included:
             sample_metrics["Library"] = sample_id
-            rows.append(sample_metrics)
-        
-        # Create a DataFrame with one row per sample.
-        df = pd.DataFrame(rows)
-        
-        # Reorder columns so that the "Library" column appears first.
+            all_samples.append(sample_metrics)
+
+        # Create a DataFrame from the list of dictionaries.
+        df = pd.DataFrame(all_samples)
+
+        # Reorder columns so that "Library" is the first column.
         if "Library" in df.columns:
-            cols = df.columns.tolist()
+            cols = list(df.columns)
             cols.remove("Library")
             df = df[["Library"] + cols]
-        
-        # Write the wide-format DataFrame to the summary output.
+
+        # Write the wide-format DataFrame to the output file.
         df.to_csv(output.summary, sep='\t', index=False)
