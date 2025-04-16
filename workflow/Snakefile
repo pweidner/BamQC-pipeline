@@ -98,39 +98,55 @@ rule aggregate_alignment_metrics:
     run:
         import pandas as pd
         import os
+        import gzip
 
-        # List to store each sample's QC metrics as a dict.
-        all_samples = []
+        all_samples = []  # list to collect per-sample dictionary of metrics
 
         for qc_file in input.qc_files:
-            # Extract the sample identifier.
+            # Derive sample id from file name (e.g., A5091_L2_i301)
             sample_id = os.path.basename(qc_file).split(".qc.tsv")[0]
+            header = None
+            data_line = None
             try:
-                result = extract_alignment_metrics(qc_file)
+                with gzip.open(qc_file, 'rt') as f:
+                    for line in f:
+                        # Look for lines starting with "ME" (alignment summary metrics block)
+                        if line.startswith("ME"):
+                            tokens = line.strip().split("\t")
+                            if header is None:
+                                header = tokens
+                            else:
+                                data_line = tokens
+                                break  # Stop after obtaining header and first data line
             except Exception as e:
-                print(f"Error processing {qc_file}: {e}")
+                print(f"Error reading {qc_file}: {e}")
                 continue
 
-            # Check if the result is already a dict.
-            if isinstance(result, dict):
-                sample_metrics = result
-            else:
-                # Assume the result is a tuple: (headers, values)
-                headers, values = result
-                sample_metrics = dict(zip(headers, values))
+            if header is None or data_line is None:
+                print(f"Could not find ME section in {qc_file}")
+                continue
 
-            # Ensure the sample (library) name is included:
-            sample_metrics["Library"] = sample_id
+            # Both header and data_line include a first column "ME" then "Sample".
+            # We want to drop these so that the resulting headers start with "Library".
+            # For example:
+            #   Original header: ["ME", "Sample", "Library", "#QCFail", "QCFailFraction", ...]
+            #   Original data:   ["ME", "IBD-CD6", "A5091_L2_i301", "0", "0", ...]
+            # We drop the first two elements.
+            new_header = header[1:]
+            new_data = data_line[1:]
+
+            # Now, new_header[0] should be "Library" and new_data[0] its value.
+            sample_metrics = dict(zip(new_header, new_data))
             all_samples.append(sample_metrics)
 
-        # Create a DataFrame from the list of dictionaries.
-        df = pd.DataFrame(all_samples)
+        # Build a DataFrame where each row is one sample (library).
+        agg_df = pd.DataFrame(all_samples)
 
-        # Reorder columns so that "Library" is the first column.
-        if "Library" in df.columns:
-            cols = list(df.columns)
+        # Make sure "Library" is the first column.
+        if "Library" in agg_df.columns:
+            cols = agg_df.columns.tolist()
             cols.remove("Library")
-            df = df[["Library"] + cols]
+            agg_df = agg_df[["Library"] + cols]
 
-        # Write the wide-format DataFrame to the output file.
-        df.to_csv(output.summary, sep='\t', index=False)
+        # Write the aggregated wide table to the output file.
+        agg_df.to_csv(output.summary, sep="\t", index=False)
