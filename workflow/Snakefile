@@ -98,53 +98,32 @@ rule aggregate_alignment_metrics:
     run:
         import pandas as pd
         import os
-
-        # Define a temporary file for storing intermediate zgrep output
-        tmp_file = output.summary.replace(".tsv", "_tmp.tsv")
         
-        # Process each QC file using a shell loop.
-        # This avoids issues with passing a list of files in a single command.
-        shell("""
-            for f in {input.qc_files}; do
-                zgrep '^ME' "$f" | cut -f2-;
-            done > {tmp_file}
-        """)
+        rows = []  # list to store each sample's metrics as a dict
         
-        # Initialize an empty DataFrame for aggregated metrics
-        df = pd.DataFrame()
-        
-        # Process each QC file individually using the helper function.
+        # Loop over each QC file
         for qc_file in input.qc_files:
+            # Extract the sample identifier from the filename.
+            # Assumes file naming like <sample>.qc.tsv.gz, adjust if necessary.
+            sample_id = os.path.basename(qc_file).split(".qc.tsv")[0]
             try:
                 sample_metrics = extract_alignment_metrics(qc_file)
             except Exception as e:
                 print(f"Error processing {qc_file}: {e}")
                 continue
             
-            # Convert the extracted metrics dictionary to a DataFrame row.
-            # Transposing ensures one row per sample.
-            sample_df = pd.DataFrame.from_dict(sample_metrics, orient="index").T
-            df = pd.concat([df, sample_df], ignore_index=True)
+            # Add the sample identifier as a key-value pair.
+            sample_metrics["Library"] = sample_id
+            rows.append(sample_metrics)
         
-        # Write the aggregated results to the summary file.
+        # Create a DataFrame with one row per sample.
+        df = pd.DataFrame(rows)
+        
+        # Reorder columns so that the "Library" column appears first.
+        if "Library" in df.columns:
+            cols = df.columns.tolist()
+            cols.remove("Library")
+            df = df[["Library"] + cols]
+        
+        # Write the wide-format DataFrame to the summary output.
         df.to_csv(output.summary, sep='\t', index=False)
-        
-        # Clean up the temporary file if it exists.
-        if os.path.exists(tmp_file):
-            os.remove(tmp_file)
-
-
-#########################################
-# Rule: clean_up_table
-# Remove the header row from the raw aggregated metrics file and update it.
-#########################################
-rule clean_up_table:
-    input:
-        raw_metrics = os.path.join(output_location, "alignment_summary_metrics.tsv")
-    output:
-        cleaned_metrics = os.path.join(output_location, "alignment_summary_metrics_cleaned.tsv")
-    shell:
-        """
-        # Remove the header from the raw metrics file and overwrite the original file
-        tail -n +2 {input.raw_metrics} > {output.cleaned_metrics} && mv {output.cleaned_metrics} {input.raw_metrics}
-        """
