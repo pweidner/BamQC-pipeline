@@ -21,9 +21,6 @@ print(r"""
 
 configfile: "config/config.yaml"
 
-import os
-import glob
-
 # -- Configuration & Paths --
 DATA_DIR      = config["data_location"]
 OUT_DIR       = config["output_location"]
