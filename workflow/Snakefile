@@ -1,12 +1,6 @@
-# Import necessary modules
-import os
-import glob
-import subprocess
-import yaml
-import pandas as pd
-from utils import extract_alignment_metrics
+configfile: "config/config.yaml"
 
-# ASCII art for BamQC-BIH
+# ================================= ASCII Art =================================
 print(r"""
  /$$$$$$$                           /$$$$$$   /$$$$$$        /$$$$$$$  /$$$$$$ /$$   /$$
 | $$__  $$                         /$$__  $$ /$$__  $$      | $$__  $$|_  $$_/| $$  | $$
@@ -18,10 +12,12 @@ print(r"""
 |_______/  \_______/|__/ |__/ |__/ \____ $$$ \______/       |_______/ |______/|__/  |__/
                                         \__/                                                       
 """)
-
-configfile: "config/config.yaml"
+print("Starting BamQC pipeline...\n")
 
 # -- Configuration & Paths --
+import os
+import glob
+
 DATA_DIR      = config["data_location"]
 OUT_DIR       = config["output_location"]
 REF_NAME      = config["ref"]
@@ -56,12 +52,11 @@ rule all:
         os.path.join(OUT_DIR, "aggregate_mosaicatcher_qc.tsv"),
         os.path.join(ANEUF_OUT_DIR, "done.txt")
 
-
 # -- Rule: Alfred QC per sample --
 rule alfred_qc:
     input:
         bam=lambda wc: os.path.join(DATA_DIR, f"{wc.sample}.sort.mdup.bam"),
-        ref=lambda: os.path.join(REF_PATH, REF_NAME)
+        ref=lambda wc: os.path.join(REF_PATH, REF_NAME)
     output:
         qc=os.path.join(STATS_DIR, "{sample}.qc.tsv.gz")
     conda:
@@ -75,7 +70,6 @@ rule alfred_qc:
         echo "Processing sample: {wildcards.sample}" > {log}
         alfred qc -r {input.ref} -o {output.qc} {input.bam} >> {log} 2>&1
         """
-
 
 # -- Rule: Aneufinder QC on entire folder --
 rule run_aneufinder:
@@ -97,7 +91,6 @@ rule run_aneufinder:
             --nCPU {threads} >> {log} 2>&1
         touch {output.marker}
         """
-
 
 # -- Rule: Aggregate Alfred alignment metrics --
 rule aggregate_alignment_metrics:
@@ -131,11 +124,9 @@ rule aggregate_alignment_metrics:
                 print(f"Warning: could not parse QC for {qc}")
 
         df = pd.DataFrame(records)
-        # Ensure Library is first column
         cols = [c for c in df.columns if c != "Library"]
         df = df[["Library"] + cols]
         df.to_csv(output.summary, sep="\t", index=False)
-
 
 # -- Rule: Aggregate Mosaicatcher QC & merge with Alfred metrics --
 rule aggregate_mosaicatcher_qc:
@@ -147,26 +138,20 @@ rule aggregate_mosaicatcher_qc:
         import pandas as pd
         import glob
 
-        # Define external dirs
         parent_dir = os.path.dirname(DATA_DIR)
         labels_file = os.path.join(parent_dir, "cell_selection", "labels.tsv")
         counts_dir  = os.path.join(parent_dir, "counts")
 
-        # Load labels
         df_labels = pd.read_csv(labels_file, sep="\t")
-        df_labels['cell'] = \
-            df_labels['cell'].str.replace(r"\.sort\.mdup\.bam$", '', regex=True)
+        df_labels['cell'] = df_labels['cell'].str.replace(r"\.sort\.mdup\.bam$", '', regex=True)
 
-        # Load counts if present
         info_files = glob.glob(os.path.join(counts_dir, "*.info"))
         df_counts = pd.concat((pd.read_csv(f, sep="\t", comment='#') for f in info_files), ignore_index=True)
 
-        # Load Alfred metrics
         df_alfred = pd.read_csv(input.alfred_summary, sep="\t")
 
-        # Merge
         df = df_labels.merge(df_counts, on=["cell", "sample"], how="left")
-        df = df.merge(df_alfred,  left_on=["cell", "sample"], right_on=["Library", "Library"], how="left")
+        df = df.merge(df_alfred, left_on=["cell", "sample"], right_on=["Library", "Library"], how="left")
         df.drop(columns=["Library"], inplace=True)
 
         df.to_csv(output.mosaic_qc, sep="\t", index=False)
