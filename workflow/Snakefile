@@ -19,232 +19,145 @@ print(r"""
                                         \__/                                                       
 """)
 
-# Load config file
 configfile: "config/config.yaml"
 
-# Define input and output directories, reference, etc.
-data_location = config["data_location"]
-output_location = config["output_location"]
-ref = config["ref"]
-reference_path = config["reference_path"]
-log_dir = os.path.join(output_location, "logs")
-aneufinder_out = os.path.join(output_location, "aneufinder-results")
+import os
+import glob
 
-# Print summary of parameters with color coding for clarity
-print("Pipeline launched with the following parameters:")
-print(f"- Data Location: \033[1;31m{data_location}\033[0m")
-print(f"- Output Location: \033[1;32m{output_location}\033[0m")
-print(f"- Reference Genome: \033[1;33m{ref}\033[0m")
-print("")
+# -- Configuration & Paths --
+DATA_DIR      = config["data_location"]
+OUT_DIR       = config["output_location"]
+REF_NAME      = config["ref"]
+REF_PATH      = config["reference_path"]
 
-# Define the file path to the reference genome file
-reference_file = os.path.join(reference_path, f"{ref}")
+LOG_DIR       = os.path.join(OUT_DIR, "logs")
+STATS_DIR     = os.path.join(OUT_DIR, "stats-by-lib")
+ANEUF_OUT_DIR = os.path.join(OUT_DIR, "aneufinder-results")
 
-# Define the list of samples based on the input BAM files.
-# Using rsplit to handle cases where filenames contain multiple periods.
-samples = [os.path.basename(f).rsplit(".sort.mdup", 1)[0] 
-           for f in glob.glob(os.path.join(data_location, "*.sort.mdup.bam"))]
+# -- Derive sample names at parse time --
+SAMPLES = [
+    os.path.basename(f).replace(".sort.mdup.bam", "")
+    for f in glob.glob(os.path.join(DATA_DIR, "*.sort.mdup.bam"))
+]
 
-# Print the expanded pattern for debugging purposes
-print("Expanding input files with the following pattern:")
-print(os.path.join(output_location, "stats-by-lib", "{sample}.qc.tsv.gz"))
-print("")
-
-
-#########################################
-# Rule: all
-# Final target rule that collects all summary outputs.
-#########################################
+# -- Rule all: aggregate final outputs --
 rule all:
-    """
-    Final target: Collect aggregated Alfred QC metrics and mosaicatcher QC metrics.
-    """
-    input:    
-        os.path.join(output_location, "alignment_summary_metrics.tsv"),
-        os.path.join(output_location, "aggregate_mosaicatcher_qc.tsv"),
-        os.path.join(aneufinder_out, "done.txt")
+    input:
+        os.path.join(OUT_DIR, "alignment_summary_metrics.tsv"),
+        os.path.join(OUT_DIR, "aggregate_mosaicatcher_qc.tsv"),
+        os.path.join(ANEUF_OUT_DIR, "done.txt")
 
 
-#########################################
-# Rule: alfred_qc
-# Process each BAM file with Alfred to generate QC statistics.
-#########################################
+# -- Rule: Alfred QC per sample --
 rule alfred_qc:
     input:
-        bam = os.path.join(data_location, "{sample}.sort.mdup.bam"),
-        reference = reference_file
+        bam=lambda wc: os.path.join(DATA_DIR, f"{wc.sample}.sort.mdup.bam"),
+        ref=lambda: os.path.join(REF_PATH, REF_NAME)
     output:
-        qc = os.path.join(output_location, "stats-by-lib", "{sample}.qc.tsv.gz")
+        qc=os.path.join(STATS_DIR, "{sample}.qc.tsv.gz")
     conda:
         "envs/qc_env.yaml"
-    threads: 4  # Allocate additional threads for processing if needed.
+    threads: 4
     log:
-        os.path.join(log_dir, "{sample}.alfred_qc.log")
+        os.path.join(LOG_DIR, "{sample}.alfred_qc.log")
     shell:
-        f"""
-        mkdir -p {log_dir}
-        echo "Processing sample: {{wildcards.sample}}" > {{log}}
-        alfred qc -r {{input.reference}} -o {{output.qc}} {{input.bam}} >> {{log}} 2>&1
+        """
+        mkdir -p {LOG_DIR} {STATS_DIR}
+        echo "Processing sample: {wildcards.sample}" > {log}
+        alfred qc -r {input.ref} -o {output.qc} {input.bam} >> {log} 2>&1
         """
 
 
-#########################################
-# Rule: run_aneufinder_qc
-# Process the BAM folder with Aneufinder to generate QC statistics.
-#########################################
+# -- Rule: Aneufinder QC on entire folder --
 rule run_aneufinder:
     input:
-        bam_folder = data_location  # Folder containing input BAM files
+        bam_folder=DATA_DIR
     output:
-        marker = os.path.join(aneufinder_out, "done.txt")
+        marker=os.path.join(ANEUF_OUT_DIR, "done.txt")
     conda:
         "envs/aneufinder_env.yaml"
     threads: 2
-    priority: 100  # High priority to start soon
     log:
-        os.path.join(log_dir, "aneufinder_run.log")
+        os.path.join(LOG_DIR, "aneufinder_run.log")
     shell:
         """
-        mkdir -p {log_dir}
-        mkdir -p {aneufinder_out}
-        Rscript workflow/scripts/aneufinder_run.R --inputfolder {input.bam_folder} --outputfolder {aneufinder_out} --nCPU {threads} >> {log} 2>&1
+        mkdir -p {LOG_DIR} {ANEUF_OUT_DIR}
+        Rscript workflow/scripts/aneufinder_run.R \
+            --inputfolder {input.bam_folder} \
+            --outputfolder {ANEUF_OUT_DIR} \
+            --nCPU {threads} >> {log} 2>&1
+        touch {output.marker}
         """
 
-#########################################
-# Rule: aggregate_alignment_metrics
-# Aggregate Alfred QC metrics from individual sample QC files.
-#########################################
+
+# -- Rule: Aggregate Alfred alignment metrics --
 rule aggregate_alignment_metrics:
     input:
-        qc_files = expand(os.path.join(output_location, "stats-by-lib", "{sample}.qc.tsv.gz"), sample=samples)
+        qc_files=expand(os.path.join(STATS_DIR, "{sample}.qc.tsv.gz"), sample=SAMPLES)
     output:
-        summary = os.path.join(output_location, "alignment_summary_metrics.tsv")
+        summary=os.path.join(OUT_DIR, "alignment_summary_metrics.tsv")
     threads: 2
     run:
         import pandas as pd
-        import os
         import gzip
 
-        all_samples = []  # list to collect per-sample dictionary of metrics
+        records = []
+        for qc in input.qc_files:
+            sample_id = os.path.basename(qc).replace(".qc.tsv.gz", "")
+            header, values = None, None
+            with gzip.open(qc, 'rt') as fh:
+                for line in fh:
+                    if line.startswith("ME"):
+                        tokens = line.strip().split("\t")
+                        if header is None:
+                            header = tokens[1:]
+                        else:
+                            values = tokens[1:]
+                            break
+            if header and values:
+                rec = dict(zip(header, values))
+                rec["Library"] = sample_id
+                records.append(rec)
+            else:
+                print(f"Warning: could not parse QC for {qc}")
 
-        for qc_file in input.qc_files:
-            # Derive sample id from file name (e.g., A5091_L2_i301)
-            sample_id = os.path.basename(qc_file).split(".qc.tsv")[0]
-            header = None
-            data_line = None
-            try:
-                with gzip.open(qc_file, 'rt') as f:
-                    for line in f:
-                        # Look for lines starting with "ME" (alignment summary metrics block)
-                        if line.startswith("ME"):
-                            tokens = line.strip().split("\t")
-                            if header is None:
-                                header = tokens
-                            else:
-                                data_line = tokens
-                                break  # Stop after obtaining header and first data line
-            except Exception as e:
-                print(f"Error reading {qc_file}: {e}")
-                continue
-
-            if header is None or data_line is None:
-                print(f"Could not find ME section in {qc_file}")
-                continue
-
-            # Remove the first column ("ME") so that headers start with "Sample" (or "Library")
-            new_header = header[1:]
-            new_data = data_line[1:]
-
-            # Build a dictionary mapping header to value.
-            sample_metrics = dict(zip(new_header, new_data))
-            all_samples.append(sample_metrics)
-
-        # Build a DataFrame where each row is one sample (library).
-        agg_df = pd.DataFrame(all_samples)
-
-        # Ensure that the "Library" column is first.
-        if "Library" in agg_df.columns:
-            cols = agg_df.columns.tolist()
-            cols.remove("Library")
-            agg_df = agg_df[["Library"] + cols]
-
-        # Write the aggregated table to file.
-        agg_df.to_csv(output.summary, sep="\t", index=False)
+        df = pd.DataFrame(records)
+        # Ensure Library is first column
+        cols = [c for c in df.columns if c != "Library"]
+        df = df[["Library"] + cols]
+        df.to_csv(output.summary, sep="\t", index=False)
 
 
-#########################################
-# Rule: aggregate_mosaicatcher_qc
-# Aggregate mosaicatcher QC metrics from cell_selection and counts folders,
-# and join with the aggregated Alfred QC metrics.
-#########################################
+# -- Rule: Aggregate Mosaicatcher QC & merge with Alfred metrics --
 rule aggregate_mosaicatcher_qc:
     input:
-        alfred = os.path.join(output_location, "alignment_summary_metrics.tsv")
+        alfred_summary=os.path.join(OUT_DIR, "alignment_summary_metrics.tsv")
     output:
-        mosaic_qc = os.path.join(output_location, "aggregate_mosaicatcher_qc.tsv")
+        mosaic_qc=os.path.join(OUT_DIR, "aggregate_mosaicatcher_qc.tsv")
     run:
-        import os
-        import glob
         import pandas as pd
+        import glob
 
-        # The BAM folder (data_location) is used to determine the parent directory.
-        parent_dir = os.path.dirname(data_location)
-        cell_selection_dir = os.path.join(parent_dir, "cell_selection")
-        counts_dir = os.path.join(parent_dir, "counts")
+        # Define external dirs
+        parent_dir = os.path.dirname(DATA_DIR)
+        labels_file = os.path.join(parent_dir, "cell_selection", "labels.tsv")
+        counts_dir  = os.path.join(parent_dir, "counts")
 
-        df_labels = None
-        df_counts = None
+        # Load labels
+        df_labels = pd.read_csv(labels_file, sep="\t")
+        df_labels['cell'] = \
+            df_labels['cell'].str.replace(r"\.sort\.mdup\.bam$", '', regex=True)
 
-        # If a cell_selection folder exists, read labels.tsv.
-        labels_file = os.path.join(cell_selection_dir, "labels.tsv")
-        if os.path.exists(cell_selection_dir) and os.path.exists(labels_file):
-            df_labels = pd.read_csv(labels_file, sep="\t")
-            # Remove ".sort.mdup.bam" from the 'cell' column.
-            df_labels['cell'] = df_labels['cell'].str.replace(r'\.sort\.mdup\.bam$', '', regex=True)
-        else:
-            print("cell_selection folder or labels.tsv not found.")
+        # Load counts if present
+        info_files = glob.glob(os.path.join(counts_dir, "*.info"))
+        df_counts = pd.concat((pd.read_csv(f, sep="\t", comment='#') for f in info_files), ignore_index=True)
 
-        # If a counts folder exists, read all .info files.
-        if os.path.exists(counts_dir):
-            counts_files = glob.glob(os.path.join(counts_dir, "*.info"))
-            if len(counts_files) > 0:
-                df_counts_list = []
-                for f in counts_files:
-                    try:
-                        # Read counts file assuming a tab-separated format with header (ignore commented lines).
-                        df_info = pd.read_csv(f, sep="\t", comment='#')
-                        df_counts_list.append(df_info)
-                    except Exception as e:
-                        print(f"Error reading counts file {f}: {e}")
-                if len(df_counts_list) > 0:
-                    df_counts = pd.concat(df_counts_list, ignore_index=True)
-                else:
-                    print("No valid counts files read.")
-            else:
-                print("No .info files found in 'counts' folder.")
-        else:
-            print("counts folder not found.")
+        # Load Alfred metrics
+        df_alfred = pd.read_csv(input.alfred_summary, sep="\t")
 
-        # Read aggregated Alfred QC metrics.
-        df_alfred = pd.read_csv(input.alfred, sep="\t")
+        # Merge
+        df = df_labels.merge(df_counts, on=["cell", "sample"], how="left")
+        df = df.merge(df_alfred,  left_on=["cell", "sample"], right_on=["Library", "Library"], how="left")
+        df.drop(columns=["Library"], inplace=True)
 
-        # Set the base dataframe using labels if available, otherwise use counts.
-        if df_labels is not None:
-            base_df = df_labels.copy()
-        elif df_counts is not None:
-            base_df = df_counts.copy()
-        else:
-            raise ValueError("Neither cell_selection/labels.tsv nor counts info files found!")
-
-        # If both labels and counts exist, merge counts into the labels dataframe.
-        if (df_labels is not None) and (df_counts is not None):
-            base_df = base_df.merge(df_counts, on=["cell", "sample"], how="left", suffixes=("", "_counts"))
-
-        # Merge the Alfred QC metrics. In the Alfred table, the key columns are 'Library' and 'Sample'.
-        base_df = base_df.merge(df_alfred, left_on=["cell", "sample"], right_on=["Library", "Sample"], how="left")
-        # Drop duplicate key columns from the Alfred table.
-        base_df.drop(columns=["Library", "Sample"], inplace=True)
-
-        # Write the final aggregated mosaicatcher QC table.
-        base_df.to_csv(output.mosaic_qc, sep="\t", index=False)
-        print("Aggregated mosaicatcher QC written to", output.mosaic_qc)
+        df.to_csv(output.mosaic_qc, sep="\t", index=False)
