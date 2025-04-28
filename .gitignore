@@ -1,0 +1,42 @@
+# ————————————————————————— Snakemake internals
+.snakemake/                    # Snakemake’s working directory
+**/.snakemake/                 # any nested .snakemake folders
+
+# ————————————————————————— Pipeline logs & errors
+logs/                          # rule‐level log files
+errors/                        # Snakemake‐generated error captures
+
+# ————————————————————————— Scheduler & cluster outputs
+# (SLURM, SGE, PBS, etc.)
+*.o*                           # standard output files
+*.e*                           # standard error files
+slurm-*.out                    # SLURM naming convention
+pbs*.o*                        # PBS naming
+
+# ————————————————————————— Large/raw/derived data
+# don’t track your FASTQ, BAM, VCF, etc.
+*.fastq
+*.fq
+*.fastq.gz
+*.fq.gz
+*.sam
+*.bam
+*.bam.bai
+*.vcf
+*.vcf.gz
+
+# ————————————————————————— Python & Conda caches
+__pycache__/                   # Python byte‐code caches
+*.py[cod]
+*$py.class
+.conda/                        # if you ever generate a local conda cache
+.venv/                         # virtualenv dirs
+
+# ————————————————————————— OS & editor temporary files
+.DS_Store                      # macOS
+Thumbs.db                      # Windows
+*.swp                          # Vim
+*~                             # Emacs/other editors
+.vscode/                       # VSCode workspace settings
+.idea/                         # JetBrains IDE settings
+
