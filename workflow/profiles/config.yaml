@@ -16,7 +16,8 @@ default-resources:
   - qos=normal
 #  - mem_mb=2000
   - time="00:30:00"
-
+set-resources:
+    - run_aneufinder_qc:mem_mb=128000
 max-jobs-per-second: 100
 max-status-checks-per-second: 100
 local-cores: 1

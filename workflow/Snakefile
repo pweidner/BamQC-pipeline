@@ -28,6 +28,7 @@ output_location = config["output_location"]
 ref = config["ref"]
 reference_path = config["reference_path"]
 log_dir = os.path.join(output_location, "logs")
+aneufinder_out = os.path.join(output_location, "aneufinder-results")
 
 # Print summary of parameters with color coding for clarity
 print("Pipeline launched with the following parameters:")
@@ -61,7 +62,7 @@ rule all:
     input:    
         os.path.join(output_location, "alignment_summary_metrics.tsv"),
         os.path.join(output_location, "aggregate_mosaicatcher_qc.tsv"),
-        os.path.join(output_location, "stats-by-lib", "aneufinder_qc.tsv")
+        os.path.join(aneufinder_out, "done.txt")
 
 
 #########################################
@@ -91,22 +92,23 @@ rule alfred_qc:
 # Rule: run_aneufinder_qc
 # Process the BAM folder with Aneufinder to generate QC statistics.
 #########################################
-rule run_aneufinder_qc:
+rule run_aneufinder:
     input:
-        bam_folder = data_location  # assumes all input BAM/other files are in this folder; adjust if needed
+        bam_folder = data_location  # Folder containing input BAM files
     output:
-        qc = os.path.join(output_location, "stats-by-lib", "aneufinder_qc.tsv")
+        marker = os.path.join(aneufinder_out, "done.txt")
     conda:
         "envs/aneufinder_env.yaml"
     threads: 2
+    priority: 100  # High priority to start soon
     log:
-        os.path.join(log_dir, "aneufinder_qc.log")
+        os.path.join(log_dir, "aneufinder_run.log")
     shell:
         """
         mkdir -p {log_dir}
-        Rscript workflow/scripts/aneufinder_qc.R --inputfolder {input.bam_folder} --output {output.qc} --nCPU {threads} >> {log} 2>&1
+        mkdir -p {aneufinder_out}
+        Rscript workflow/scripts/aneufinder_run.R --inputfolder {input.bam_folder} --outputfolder {aneufinder_out} --nCPU {threads} >> {log} 2>&1
         """
-
 
 #########################################
 # Rule: aggregate_alignment_metrics
