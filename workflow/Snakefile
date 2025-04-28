@@ -58,7 +58,7 @@ rule all:
 rule alfred_qc:
     input:
         bam=lambda wc: os.path.join(DATA_DIR, f"{wc.sample}.sort.mdup.bam"),
-        ref=lambda: REF_FILE
+        ref=lambda wc: REF_FILE
     output:
         qc=os.path.join(STATS_DIR, "{sample}.qc.tsv.gz")
     conda:
