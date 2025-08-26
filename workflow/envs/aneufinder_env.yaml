@@ -5,6 +5,7 @@ channels:
 dependencies:
     - python=3.11
     - r-base
+    - openssl==3.2.3
     - bioconductor-aneufinder=1.26.0
     - r-optparse
     - r-dplyr
