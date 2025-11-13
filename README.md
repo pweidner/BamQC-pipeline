@@ -4,9 +4,9 @@ A fast, reproducible **Snakemake** workflow for **QC of BAMs** — alignment sta
 
 **Highlights**
 - 🧬 **Alfred** alignment + error metrics  
-- 🧊 **Binned coverage** → entropy, spikiness, GC bias  
-- 📈 **preseq** library complexity curves  
-- 🧠 **Ashley’s QC**: auto-merge existing labels/features or predict  
+- 🧊 **Bedtools** → binned coverage entropy, spikiness, gini, GC bias
+- 📈 **Preseq** library complexity curves  
+- 🧠 **ASHLEYS QC**: auto-merge existing labels/features or predict  
 - 🖼️ **Plots**: per-library PDFs + run summary  
 - 🗂️ **Clean outputs** with consistent join key `Library`
 
@@ -131,7 +131,7 @@ output_location/
 | **Clipping and Context** | `#SoftClippedBases`, `SoftClipRate`, `#HardClippedBases`, `HardClipRate`, `HomopolymerContextDel`, `HomopolymerContextIns` | Soft/hard clipping frequency and homopolymer indel contexts. |
 | **Insert Size / Layout** | `DefaultLibraryLayout`, `MedianReadLength`, `MedianInsertSize_x`, `MedianInsertSize_y` | Median read and fragment lengths; layout (PE vs SE). |
 | **Mapping Quality** | `MedianMAPQ_x`, `MedianMAPQ_y`, `p_mq` | Distribution and fraction of high-MAPQ reads. |
-| **Binned Coverage Metrics** | `n.bins`, `avg.binsize`, `total.read.count`, `avg.read.count`, `spikiness`, `entropy`, `coverage_gini`, `coverage_cv`, `coverage_mad`, `coverage_sd` | **bedtools-binned** metrics characterizing coverage uniformity and noise. Entropy/spikiness quantify library evenness and strand-specific artifacts. |
+| **Binned Coverage Metrics** | `n.bins`, `avg.binsize`, `total.read.count`, `avg.read.count`, `spikiness`, `entropy`, `coverage_gini`, `coverage_cv`, `coverage_mad`, `coverage_sd` | **bedtools-binned** metrics characterizing coverage uniformity and noise. Entropy/spikiness/gini quantify library evenness and strand-specific artifacts. |
 | **GC Bias & Fold80** | `fold80_penalty`, `gc_pearson_r` | GC-coverage correlation and Fold-80 penalty (uniformity measure). |
 | **Library Complexity (preseq)** | `preseq_distinct_at_observed`, `preseq_saturation` | Predicted complexity curve and saturation fraction at observed sequencing depth. |
 | **Coverage Depth Fractions** | `pct_ge_1x`, `pct_ge_10x`, `pct_ge_30x` | Percentage of reference bases covered ≥ 1×, 10×, 30×. |
