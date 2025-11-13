@@ -138,7 +138,6 @@ output_location/
 | **Ashley’s QC Predictions** | `prediction`, `probability` | Auto-classification of library quality via **Ashley’s QC** model or feature merge. |
 | **Mosaicatcher Counts (good reads)** | `p_unmap`, `p_map`, `p_supp`, `p_dup`, `p_read2`, `p_good` | Fractions of reads in each category from `counts.info` — representing filtered “good” reads in downstream plots. |
 | **Binned Window Weights** | `W10_5.0mb` → `W100_0.2mb`, `total_*` | Fractional read coverage across genome windows (multi-scale binning). Useful for CNV/spikiness consistency QC. |
-````
 
 ## Notes
 - **Entropy** and **spikiness** reflect coverage evenness (low entropy or high spikiness = uneven).
