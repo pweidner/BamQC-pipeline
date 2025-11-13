@@ -58,28 +58,24 @@ ashleys:
 ## ▶️ 3. Run
 
 ```bash
-snakemake   --config ref=hg38 reference_path=/ref            data_location=/data/runA            output_location=/data/runA/bamqc   --profile workflow/profiles   --rerun-incomplete --keep-going
+snakemake --config data_location=/data/runA output_location=/data/runA/bamqc --profile workflow/profiles --keep-going
 ```
 
 ---
 
 ## 📂 4. Output structure
 
-All paths relative to your `output_location`.
-
 ```
 output_location/
-├── alignment_summary_metrics.tsv        # 🧬 Alfred summary across libraries
-├── final_qc.tsv                         # 🧩 Alfred + counts-based + preseq QC
-├── final_qc_with_ashleys.tsv            # 🧠 final_qc + Ashley’s columns
+├── final_qc.tsv                         # 🧩 Alfred + counts-based + counts.info + preseq QC + Ashley’s columns
 │
-├── results/                             # 📊 deliverables
+├── results/                             # 📊 Per tool deliverables
 │   ├── final_qc.tsv
-│   ├── final_qc_with_ashleys.tsv
-│   └── alignment_summary_metrics.tsv
+│   ├── preseq_metrics.tsv               # Preseq summary stats across libraries
+│   └── alignment_summary_metrics.tsv    # Alfred summary across libraries
 │
 ├── metadata/
-│   └── library_map.tsv                  # cell <-> Library mapping
+│   └── library_map.tsv                  # cell <-> Library mapping for sanity checks
 │
 ├── stats-by-lib/
 │   └── {Library}.qc.tsv.gz              # per-lib Alfred output
@@ -91,7 +87,7 @@ output_location/
 │   └── {Library}.counts_qc.tsv          # entropy/spikiness/GC-bias metrics
 │
 ├── preseq/
-│   └── {Library}.lc.tsv                 # library complexity curve
+│   └── {Library}.lc.tsv                 # library complexity curves
 │
 ├── ashleys/
 │   ├── features.tsv                     # merged/computed Ashley features
@@ -102,7 +98,7 @@ output_location/
 │
 └── plots/
     ├── per-lib-qc/{Library}.qc.pdf      # optional per-lib PDF
-    └── run_summary.pdf                  # optional run summary plot
+    └── run_summary.pdf                  # run/cohort summary plots
 ```
 
 ---
@@ -121,31 +117,35 @@ output_location/
 
 ---
 
-## 🧬 6. Ashley’s integration
+## 🧬 6. Output Metrics
 
-- If `*/cell_selection/labels.tsv` or similar exist → merged into `ashleys/prediction/prediction.tsv`
-- If `*/predictions/ashleys_features.tsv` exist → merged into `ashleys/features.tsv`
-- Otherwise, features + predictions are **computed** automatically  
-- Everything is **normalized** to `Library` for merging
+| **Category** | **Representative Columns** | **Description** |
+|---------------|-----------------------------|-----------------|
+| **Library Metadata** | `Library`, `Sample`, `sample_name`, `Base` | Unique identifiers for libraries/samples. Used as join key across all tables. |
+| **Read Quality Filtering** | `#QCFail`, `QCFailFraction`, `#DuplicateMarked`, `DuplicateFraction`, `#Unmapped`, `UnmappedFraction` | Counts and fractions of reads filtered due to QC failure, duplication, or unmapping. Computed from **Alfred** metrics. |
+| **Alignment Summary** | `#Mapped`, `MappedFraction`, `#MappedRead1`, `#MappedRead2`, `RatioMapped2vsMapped1`, `#MappedForward`, `MappedForwardFraction`, `#MappedReverse`, `MappedReverseFraction` | Alignment distribution across reads and orientations. |
+| **Alignment Types** | `#SecondaryAlignments`, `SecondaryAlignmentFraction`, `#SupplementaryAlignments`, `SupplementaryAlignmentFraction`, `#SplicedAlignments`, `SplicedAlignmentFraction` | Multi-mapping, split, or spliced alignment metrics. |
+| **Pairing & Proper Pairs** | `#Pairs`, `#MappedPairs`, `MappedPairsFraction`, `#MappedSameChr`, `MappedSameChrFraction`, `#MappedProperPair`, `MappedProperFraction` | Mate-pair statistics, intra-chromosomal mapping, and pairing quality. |
+| **Reference / Coverage Stats** | `#ReferenceBp`, `#ReferenceNs`, `#AlignedBases`, `CoveredBp`, `FractionCovered`, `MedianCoverage`, `SDCoverage` | Total reference bases, aligned coverage, and coverage spread across genome. |
+| **Base-level Alignment Accuracy** | `#MatchedBases`, `MatchRate`, `#MismatchedBases`, `MismatchRate`, `#DeletionsCigarD`, `DeletionRate`, `#InsertionsCigarI`, `InsertionRate`, `ErrorRate` | Alignment accuracy and indel rates, derived from **Alfred error metrics**. |
+| **Clipping and Context** | `#SoftClippedBases`, `SoftClipRate`, `#HardClippedBases`, `HardClipRate`, `HomopolymerContextDel`, `HomopolymerContextIns` | Soft/hard clipping frequency and homopolymer indel contexts. |
+| **Insert Size / Layout** | `DefaultLibraryLayout`, `MedianReadLength`, `MedianInsertSize_x`, `MedianInsertSize_y` | Median read and fragment lengths; layout (PE vs SE). |
+| **Mapping Quality** | `MedianMAPQ_x`, `MedianMAPQ_y`, `p_mq` | Distribution and fraction of high-MAPQ reads. |
+| **Binned Coverage Metrics** | `n.bins`, `avg.binsize`, `total.read.count`, `avg.read.count`, `spikiness`, `entropy`, `coverage_gini`, `coverage_cv`, `coverage_mad`, `coverage_sd` | **bedtools-binned** metrics characterizing coverage uniformity and noise. Entropy/spikiness quantify library evenness and strand-specific artifacts. |
+| **GC Bias & Fold80** | `fold80_penalty`, `gc_pearson_r` | GC-coverage correlation and Fold-80 penalty (uniformity measure). |
+| **Library Complexity (preseq)** | `preseq_distinct_at_observed`, `preseq_saturation` | Predicted complexity curve and saturation fraction at observed sequencing depth. |
+| **Coverage Depth Fractions** | `pct_ge_1x`, `pct_ge_10x`, `pct_ge_30x` | Percentage of reference bases covered ≥ 1×, 10×, 30×. |
+| **Ashley’s QC Predictions** | `prediction`, `probability` | Auto-classification of library quality via **Ashley’s QC** model or feature merge. |
+| **Mosaicatcher Counts (good reads)** | `p_unmap`, `p_map`, `p_supp`, `p_dup`, `p_read2`, `p_good` | Fractions of reads in each category from `counts.info` — representing filtered “good” reads in downstream plots. |
+| **Binned Window Weights** | `W10_5.0mb` → `W100_0.2mb`, `total_*` | Fractional read coverage across genome windows (multi-scale binning). Useful for CNV/spikiness consistency QC. |
+````
 
----
-
-## 🖨️ 7. Quick examples
-
-**Run full QC**
-```bash
-snakemake --config ref=hg38 data_location=/bams output_location=/out --profile workflow/profiles
-```
-
-**Generate only plots**
-```bash
-snakemake plots/run_summary.pdf --profile workflow/profiles
-```
-
-**Recompute Ashley features only**
-```bash
-snakemake ashleys/features.tsv --cores 16
-```
+## Notes
+- **Entropy** and **spikiness** reflect coverage evenness (low entropy or high spikiness = uneven).
+- **Fold80 penalty** follows the Picard metric (ideal = 1, higher = less uniform).
+- **Preseq** metrics allow extrapolation of unique reads vs sequencing depth.
+- **Ashley’s QC** integrates pretrained classification of Strand-seq libraries by coverage pattern and W→C balance.
+- **Mosaicatcher** fractions (`p_good`, etc.) summarize the final usable subset for downstream analyses like count plots and phasing.
 
 ---
 
@@ -161,17 +161,10 @@ snakemake ashleys/features.tsv --cores 16
 
 ## 💡 9. Roadmap
 
-- VerifyBamID / contamination checks  
+- contamination checks  
 - More GC/coverage plots (Lorenz, violin)  
 - Optional HTML dashboard  
 
 ---
-
-### ❤️ Contributing
-
-Please open issues or PRs with:
-- your `config.yaml`
-- the `snakemake` command used
-- relevant logs under `logs/` or `errors/`
 
 Happy QC’ing! 🧪✨
