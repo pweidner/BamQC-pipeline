@@ -1,4 +1,84 @@
+# Snakefile
 configfile: "config/config.yaml"
+
+# =========================== Imports & helpers ============================
+import os, sys, glob
+from pathlib import Path
+
+def _bool(x, default=False):
+    if x is None: return default
+    if isinstance(x, bool): return x
+    return str(x).lower() in ("1","true","yes","y","on")
+
+# -------------------- Read config with sensible defaults ------------------
+DATA_ROOT   = Path(config["data_location"]).resolve()
+OUT_ROOT    = Path(config["output_location"]).resolve()
+REF_NAME    = config.get("ref", "hg38")
+REF_BASE    = Path(config.get("reference_path", ".")).resolve()
+REF_FASTA   = str(REF_BASE / f"{REF_NAME}.fa")
+WIN_SIZE    = int(config.get("window", 200000))
+PLOT_TOGGLE = _bool(config.get("plot", False))
+
+BAM_EXT     = config.get("bam_ext", ".sort.mdup.bam")
+TMP_DIR     = str(config.get("tmp_dir", "/data/cephfs-1/scratch/groups/sanders/kiwi_tmp/tmp"))
+
+# Ashley defaults + overrides
+ASH_DEFAULT = {
+    "enabled": True,
+    "bin": "/data/cephfs-1/home/users/pweidne_m/work/ashleys-qc/bin/ashleys.py",
+    "model_path": "/data/cephfs-1/home/users/pweidne_m/work/ashleys-qc/models/svc_default.pkl",
+    "win_sizes": [5_000_000, 2_000_000, 1_000_000, 800_000, 600_000, 400_000, 200_000],
+    "threads": 32,
+    "mem_mb": 200000,
+    "conda_env": "envs/ashleys.yaml",
+}
+ASH = {**ASH_DEFAULT, **config.get("ashleys", {})}
+ASH_ENABLED = _bool(ASH.get("enabled", True))
+
+# -------------------------- Discover BAMs (auto) --------------------------
+# Supports:
+#  - FLAT mode: DATA_ROOT contains *.bam directly
+#  - HIER mode: DATA_ROOT/<SAMPLE>/bam/*.bam
+#
+# Sample IDs are guaranteed unique:
+#  - FLAT mode: sample = <bam_basename-without-ext>
+#  - HIER mode: sample = <SAMPLEDIR>_<bam_basename-without-ext>
+#
+def discover_bams(root: Path, bam_ext: str):
+    mode = None
+    bam_of = {}  # sample_id -> bam_path
+    if not root.exists():
+        print(f"[ERROR] data_location does not exist: {root}", file=sys.stderr)
+        sys.exit(2)
+
+    # FLAT?
+    flat = sorted(root.glob(f"*{bam_ext}"))
+    if flat:
+        mode = "FLAT"
+        for b in flat:
+            sid = b.name[:-len(bam_ext)]
+            bam_of[sid] = str(b)
+    else:
+        # HIER: look for immediate children with a 'bam' folder
+        mode = "HIER"
+        for child in sorted(p for p in root.iterdir() if p.is_dir()):
+            bamdir = child / "bam"
+            if not bamdir.is_dir():
+                continue
+            for b in sorted(bamdir.glob(f"*{bam_ext}")):
+                sid = f"{child.name}_{b.name[:-len(bam_ext)]}"
+                bam_of[sid] = str(b)
+
+    if not bam_of:
+        print(f"[ERROR] No BAMs found under {root}. "
+              f"Looked for pattern '*{bam_ext}' in FLAT mode or '*/bam/*{bam_ext}' in HIER mode.",
+              file=sys.stderr)
+        sys.exit(3)
+
+    return mode, bam_of
+
+MODE, BAM_OF = discover_bams(DATA_ROOT, BAM_EXT)
+SAMPLES = sorted(BAM_OF.keys())
 
 # ================================= ASCII Art =================================
 print(r"""
@@ -10,100 +90,103 @@ print(r"""
 | $$  \ $$ /$$__  $$| $$ | $$ | $$| $$/$$ $$| $$    $$      | $$  \ $$  | $$  | $$  | $$
 | $$$$$$$/|  $$$$$$$| $$ | $$ | $$|  $$$$$$/|  $$$$$$/      | $$$$$$$/ /$$$$$$| $$  | $$
 |_______/  \_______/|__/ |__/ |__/ \____ $$$ \______/       |_______/ |______/|__/  |__/
-                                        \__/                                                       
+                                        \__/
 """)
 print("Starting BamQC pipeline...\n")
 
-# -- Configuration & Paths --
-import os
-import glob
+print("\n=== BamQC: input discovery ===")
+print(f"- Mode: {MODE}")
+print(f"- data_location: {DATA_ROOT}")
+print(f"- output_location: {OUT_ROOT}")
+print(f"- reference: {REF_NAME}  ({REF_FASTA})")
+print(f"- discovered libraries: {len(SAMPLES)}")
+print("  · showing first 8:", ", ".join(SAMPLES[:8]), ("..." if len(SAMPLES)>8 else ""))
+print(f"- Ashley: {'ENABLED' if ASH_ENABLED else 'disabled'}")
+print("================================\n")
 
-DATA_DIR      = config["data_location"]
-OUT_DIR       = config["output_location"]
-REF_NAME      = config["ref"]
-REF_PATH      = config["reference_path"]
-# Construct full path to reference FASTA
-REF_FILE      = os.path.join(REF_PATH, f"{REF_NAME}.fa")
+# ---------------------------- Output structure ----------------------------
+def out_path(*parts): return str(OUT_ROOT.joinpath(*parts))
 
-LOG_DIR       = os.path.join(OUT_DIR, "logs")
-STATS_DIR     = os.path.join(OUT_DIR, "stats-by-lib")
-ANEUF_OUT_DIR = os.path.join(OUT_DIR, "aneufinder-results")
+DIR_LOGS   = out_path("logs")
+DIR_STATS  = out_path("stats-by-lib")
+DIR_BINS   = out_path("binned")
+DIR_QC2    = out_path("qc-from-bins")
+DIR_PRESEQ = out_path("preseq")
+DIR_PLOTS  = out_path("plots")
 
-# -- Verbose parameter summary --
-print("Pipeline launched with the following parameters:")
-print(f"- Data Location: \033[1;31m{DATA_DIR}\033[0m")
-print(f"- Output Location: \033[1;32m{OUT_DIR}\033[0m")
-print(f"- Reference Genome: \033[1;33m{REF_NAME} (fasta: {REF_FILE})\033[0m")
-print("")
+# new: clearly discoverable results + metadata
+DIR_RESULTS  = out_path("results")
+DIR_METADATA = out_path("metadata")
 
-# -- Derive sample names at parse time --
-SAMPLES = [
-    os.path.basename(f).replace(".sort.mdup.bam", "")
-    for f in glob.glob(os.path.join(DATA_DIR, "*.sort.mdup.bam"))
+WIN_BED_GZ = out_path(f"windows_{WIN_SIZE}.bed.gz")
+WIN_GC_GZ  = out_path(f"windows_{WIN_SIZE}.gc.tsv.gz")
+
+# Ashley
+DIR_ASH        = out_path("ashleys")
+DIR_ASH_LOGS   = out_path("ashleys", "logs")
+ASH_FEATURES   = out_path("ashleys", "features.tsv")
+ASH_FEAT_NORM  = out_path("ashleys", "features.norm.tsv")
+ASH_PRED_DIR   = out_path("ashleys", "prediction")
+ASH_PRED_TSV   = out_path("ashleys", "prediction", "prediction.tsv")
+ASH_PRED_NORM  = out_path("ashleys", "prediction", "prediction.norm.tsv")
+
+# metadata
+LIBMAP_TSV     = out_path("metadata", "library_map.tsv")
+
+# Helper for Ashley window sizes
+def ash_win_str():
+    return " ".join(str(w) for w in ASH.get("win_sizes", ASH_DEFAULT["win_sizes"]))
+
+# ============================== RULE ALL =====================================
+plot_targets = []
+if PLOT_TOGGLE:
+    plot_targets = expand(out_path("plots", "per-lib-qc", "{sample}.qc.pdf"), sample=SAMPLES)
+
+ALL_TARGETS = [
+    out_path("alignment_summary_metrics.tsv"),
+    out_path("final_qc.tsv"),
+    out_path("plots", "run_summary.pdf"),
+    # always build preseq curves so the dir is populated
+    *expand(out_path("preseq", "{sample}.lc.tsv"), sample=SAMPLES),
+    *plot_targets
 ]
+if ASH_ENABLED:
+    ALL_TARGETS.append(out_path("final_qc_with_ashleys.tsv"))
 
-# -- Verbose expansion info --
-print("Expanding input files with the following pattern:")
-print(os.path.join(STATS_DIR, "{sample}.qc.tsv.gz"))
-print("")
-
-# -- Rule all: aggregate final outputs --
 rule all:
-    input:
-        os.path.join(OUT_DIR, "alignment_summary_metrics.tsv"),
-        os.path.join(OUT_DIR, "aggregate_mosaicatcher_qc.tsv"),
-        os.path.join(ANEUF_OUT_DIR, "done.txt")
+    input: ALL_TARGETS
 
-# -- Rule: Alfred QC per sample --
+# ============================== CORE RULES ===================================
 rule alfred_qc:
     input:
-        bam=lambda wc: os.path.join(DATA_DIR, f"{wc.sample}.sort.mdup.bam"),
-        ref=lambda wc: REF_FILE
+        bam=lambda wc: BAM_OF[wc.sample],
+        ref=REF_FASTA
     output:
-        qc=os.path.join(STATS_DIR, "{sample}.qc.tsv.gz")
-    conda:
-        "envs/qc_env.yaml"
+        qc=out_path("stats-by-lib", "{sample}.qc.tsv.gz")
+    conda: "envs/qc_env.yaml"
     threads: 4
     log:
-        os.path.join(LOG_DIR, "{sample}.alfred_qc.log")
+        out_path("logs", "{sample}.alfred_qc.log")
+    params:
+        log_dir=DIR_LOGS,
+        stats_dir=DIR_STATS
     shell:
         """
-        mkdir -p {LOG_DIR} {STATS_DIR}
+        mkdir -p {params.log_dir} {params.stats_dir}
         echo "Processing sample: {wildcards.sample}" > {log}
         alfred qc -r {input.ref} -o {output.qc} {input.bam} >> {log} 2>&1
         """
 
-# -- Rule: Aneufinder QC on entire folder --
-rule run_aneufinder:
-    input:
-        bam_folder=DATA_DIR
-    output:
-        marker=os.path.join(ANEUF_OUT_DIR, "done.txt")
-    conda:
-        "envs/aneufinder_env.yaml"
-    threads: 2
-    log:
-        os.path.join(LOG_DIR, "aneufinder_run.log")
-    shell:
-        """
-        mkdir -p {LOG_DIR} {ANEUF_OUT_DIR}
-        Rscript workflow/scripts/aneufinder_run.R \
-            --inputfolder {input.bam_folder} \
-            --outputfolder {ANEUF_OUT_DIR} \
-            --nCPU {threads} >> {log} 2>&1
-        touch {output.marker}
-        """
-
-# -- Rule: Aggregate Alfred alignment metrics --
 rule aggregate_alignment_metrics:
     input:
-        qc_files=expand(os.path.join(STATS_DIR, "{sample}.qc.tsv.gz"), sample=SAMPLES)
+        qc_files=expand(out_path("stats-by-lib", "{sample}.qc.tsv.gz"), sample=SAMPLES)
     output:
-        summary=os.path.join(OUT_DIR, "alignment_summary_metrics.tsv")
+        summary=out_path("alignment_summary_metrics.tsv")
     threads: 2
     run:
-        import pandas as pd
-        import gzip
+        import os, gzip, tempfile, pandas as pd
+        odir = os.path.dirname(output.summary)
+        os.makedirs(odir, exist_ok=True)
 
         records = []
         for qc in input.qc_files:
@@ -112,48 +195,472 @@ rule aggregate_alignment_metrics:
             with gzip.open(qc, 'rt') as fh:
                 for line in fh:
                     if line.startswith("ME"):
-                        tokens = line.strip().split("\t")
+                        toks = line.rstrip("\n").split("\t")
                         if header is None:
-                            header = tokens[1:]
+                            header = toks[1:]
                         else:
-                            values = tokens[1:]
+                            values = toks[1:]
                             break
-            if header and values:
+            if header and values and len(header) == len(values):
                 rec = dict(zip(header, values))
                 rec["Library"] = sample_id
                 records.append(rec)
             else:
-                print(f"Warning: could not parse QC for {qc}")
+                print(f"[aggregate_alignment_metrics] Warning: could not parse 'ME' lines in {qc}")
 
-        df = pd.DataFrame(records)
-        cols = [c for c in df.columns if c != "Library"]
-        df = df[["Library"] + cols]
-        df.to_csv(output.summary, sep="\t", index=False)
-
-# -- Rule: Aggregate Mosaicatcher QC & merge with Alfred metrics --
-rule aggregate_mosaicatcher_qc:
-    input:
-        alfred_summary=os.path.join(OUT_DIR, "alignment_summary_metrics.tsv")
-    output:
-        mosaic_qc=os.path.join(OUT_DIR, "aggregate_mosaicatcher_qc.tsv")
-    run:
         import pandas as pd
-        import glob
+        df = pd.DataFrame.from_records(records)
+        if "Library" in df.columns:
+            cols = ["Library"] + [c for c in df.columns if c != "Library"]
+            df = df[cols]
 
-        parent_dir = os.path.dirname(DATA_DIR)
-        labels_file = os.path.join(parent_dir, "cell_selection", "labels.tsv")
-        counts_dir  = os.path.join(parent_dir, "counts")
+        with tempfile.NamedTemporaryFile("w", delete=False, dir=odir, suffix=".tmp") as tf:
+            tmp_path = tf.name
+            df.to_csv(tf, sep="\t", index=False)
+            tf.flush(); os.fsync(tf.fileno())
+        os.replace(tmp_path, output.summary)
 
-        df_labels = pd.read_csv(labels_file, sep="\t")
-        df_labels['cell'] = df_labels['cell'].str.replace(r"\.sort\.mdup\.bam$", '', regex=True)
+rule make_windows:
+    input:
+        fai=f"{REF_FASTA}.fai"
+    output:
+        bed=WIN_BED_GZ
+    conda: "envs/qc_env.yaml"
+    params:
+        out_dir=str(OUT_ROOT),
+        window=WIN_SIZE
+    shell:
+        """
+        mkdir -p {params.out_dir}
+        bedtools makewindows -g {input.fai} -w {params.window} \
+          | bgzip -c > {output.bed}
+        """
 
-        info_files = glob.glob(os.path.join(counts_dir, "*.info"))
-        df_counts = pd.concat((pd.read_csv(f, sep="\t", comment='#') for f in info_files), ignore_index=True)
+rule coverage_counts:
+    input:
+        bam=lambda wc: BAM_OF[wc.sample],
+        bai=lambda wc: BAM_OF[wc.sample] + ".bai",
+        win=WIN_BED_GZ
+    output:
+        tsv=out_path("binned", "{sample}.bins.tsv.gz")
+    threads: 2
+    resources:
+        mem_mb=20000,
+        partition="medium",
+        qos="normal",
+        time="04:00:00",
+        tmpdir=TMP_DIR
+    conda: "envs/py_env.yaml"
+    log:
+        out_path("logs", "{sample}.coverage_counts.log")
+    params:
+        bins_dir=DIR_BINS,
+        log_dir=DIR_LOGS
+    shell:
+        r"""
+        set -euo pipefail
+        mkdir -p {params.bins_dir} {params.log_dir} "{resources.tmpdir}"
 
-        df_alfred = pd.read_csv(input.alfred_summary, sep="\t")
+        tmpdir="{resources.tmpdir}"
+        fprefix="{wildcards.sample}"
+        fbam="${{tmpdir}}/${{fprefix}}.chr1_22_XY.filtered.bam"
+        gfile="${{tmpdir}}/${{fprefix}}.genome"
+        tbed="${{tmpdir}}/${{fprefix}}.chr1_22_XY.targets.bed"
+        wbed="{input.win}"
 
-        df = df_labels.merge(df_counts, on=["cell", "sample"], how="left")
-        df = df.merge(df_alfred, left_on=["cell", "sample"], right_on=["Library", "Library"], how="left")
-        df.drop(columns=["Library"], inplace=True)
+        # Build genome file (chrom\tlength)
+        samtools view -H {input.bam} \
+          | awk 'BEGIN{{OFS="\t"}} $1=="@SQ"{{split($2,a,":"); split($3,b,":"); print a[2], b[2]}}' > "${{gfile}}"
 
-        df.to_csv(output.mosaic_qc, sep="\t", index=False)
+        bam_has_chr=$(head -n1 "${{gfile}}" | cut -f1 | grep -c '^chr' || true)
+
+        if [[ "${{bam_has_chr}}" -eq 1 ]]; then
+          keep=$(printf 'chr%s\n' $(seq 1 22) X Y)
+        else
+          keep=$(printf '%s\n' $(seq 1 22) X Y)
+        fi
+
+        awk 'BEGIN{{OFS="\t"}} FNR==NR{{keep[$1]=1; next}} ($1 in keep){{print $1,0,$2}}' \
+          <(printf "%s\n" $keep) "${{gfile}}" > "${{tbed}}"
+
+        samtools view -@ {threads} -b -F 3584 -q 10 -L "${{tbed}}" {input.bam} -o "${{fbam}}"
+        samtools index -@ {threads} "${{fbam}}"
+
+        zcat "${{wbed}}" \
+          | awk -v bam_has_chr="${{bam_has_chr}}" 'BEGIN{{OFS="\t"}}
+                {{ c=$1; s=$2; e=$3;
+                   if (bam_has_chr==1 && c !~ /^chr/) c="chr" c;
+                   else if (bam_has_chr==0 && c ~ /^chr/) sub(/^chr/,"",c);
+                   print c,s,e }}' \
+          | awk 'BEGIN{{OFS="\t"}} FNR==NR{{len[$1]=$2; next}} ($1 in len){{print $0}}' "${{gfile}}" - \
+          | bedtools sort -g "${{gfile}}" -i - \
+          | bgzip -c > "${{wbed}}.harmonized.{wildcards.sample}.bed.gz"
+
+        bedtools coverage \
+          -sorted \
+          -g "${{gfile}}" \
+          -a "${{wbed}}.harmonized.{wildcards.sample}.bed.gz" \
+          -b "${{fbam}}" \
+          -counts \
+          2>> {log} \
+          | bgzip -c > {output.tsv}
+
+        rm -f "${{fbam}}" "${{fbam}}.bai" "${{wbed}}.harmonized.{wildcards.sample}.bed.gz" "${{tbed}}" "${{gfile}}"
+        """
+
+rule windows_gc:
+    input:
+        win=WIN_BED_GZ,
+        fa=REF_FASTA
+    output:
+        gc=WIN_GC_GZ
+    conda: "envs/qc_env.yaml"
+    log:
+        out_path("logs", f"windows_{WIN_SIZE}.gc.log")
+    params:
+        out_dir=str(OUT_ROOT)
+    shell:
+        r"""
+        set -euo pipefail
+        mkdir -p {params.out_dir} $(dirname {log})
+        (
+          echo -e "chrom\tstart\tend\tGC"
+          zcat {input.win} \
+            | bedtools nuc -fi {input.fa} -bed - \
+            | awk 'BEGIN{{OFS="\t"}} NR>1 {{print $1,$2,$3,$5}}'
+        ) | bgzip -c > {output.gc} 2> {log}
+        """
+
+rule preseq_lc:
+    input:
+        bam=lambda wc: BAM_OF[wc.sample],
+        bai=lambda wc: BAM_OF[wc.sample] + ".bai"
+    output:
+        tsv=out_path("preseq", "{sample}.lc.tsv")
+    threads: 4
+    resources:
+        mem_mb=8000,
+        partition="short",
+        qos="normal",
+        time="01:30:00",
+        tmpdir=TMP_DIR
+    conda: "envs/preseq.yaml"
+    log:
+        out_path("logs", "{sample}.preseq.log")
+    params:
+        preseq_dir=DIR_PRESEQ,
+        log_dir=DIR_LOGS
+    shell:
+        r"""
+        set -euo pipefail
+        mkdir -p {params.preseq_dir} {params.log_dir} {resources.tmpdir}
+        wdir="{resources.tmpdir}/{wildcards.sample}.preseq"
+        mkdir -p "${{wdir}}"
+        pbam="${{wdir}}/1.primary.bam"
+        nbam="${{wdir}}/2.namesort.bam"
+        bedpe="${{wdir}}/3.pairs.bedpe"
+        frag="${{wdir}}/4.fragments.bed"
+        frgs="${{wdir}}/5.fragments.sorted.bed"
+
+        echo "[which]" >> {log}
+        command -v samtools bedtools preseq >> {log}
+        preseq 2>&1 | head -n 3 >> {log}
+
+        samtools view -@ {threads} -b -F 2304 {input.bam} -o "${{pbam}}" >> {log} 2>&1
+        samtools sort -@ {threads} -n -o "${{nbam}}" "${{pbam}}" >> {log} 2>&1
+        bedtools bamtobed -bedpe -i "${{nbam}}" > "${{bedpe}}" 2>> {log}
+
+        awk 'BEGIN{{OFS="\t"}} $1==$4 && $2!=-1 && $5!=-1 {{ s=($2<$5)?$2:$5; e=($3>$6)?$3:$6; if(e>s) print $1,s,e; }}' \
+            "${{bedpe}}" > "${{frag}}"
+
+        LC_ALL=C sort -k1,1 -k2,2n -k3,3n "${{frag}}" > "${{frgs}}"
+
+        maxdup=$(awk 'BEGIN{{FS=OFS="\t"}} {{k=$1":"$2"-"$3; c[k]++}} END{{m=0; for(k in c) if(c[k]>m) m=c[k]; print m+0}}' "${{frgs}}")
+        nfrag=$(wc -l < "${{frgs}}")
+        echo "[dup_spectrum] fragments=${{nfrag}} max_dup=${{maxdup}}" >> {log}
+
+        if [[ "${{nfrag}}" -lt 1000 ]]; then
+          echo "[preseq] Too few fragments (<1000). Using -D -Q fallback." >> {log}
+          preseq lc_extrap -D -Q -o {output.tsv} "${{frgs}}" >> {log} 2>&1 || true
+        elif [[ "${{maxdup}}" -lt 4 ]]; then
+          echo "[preseq] Sparse duplicate spectrum (max_dup<4). Using -D -Q fallback." >> {log}
+          preseq lc_extrap -D -Q -o {output.tsv} "${{frgs}}" >> {log} 2>&1 || true
+        else
+          echo "[preseq] Running standard lc_extrap." >> {log}
+          preseq lc_extrap -o {output.tsv} "${{frgs}}" >> {log} 2>&1 || true
+        fi
+
+        if [[ ! -s "{output.tsv}" ]]; then
+          echo -e "TOTAL_READS\tEXPECTED_DISTINCT\tLOWER_0.95CI\tUPPER_0.95CI" > {output.tsv}
+          echo -e "0\t0\t0\t0" >> {output.tsv}
+          echo "[preseq] Wrote stub curve due to failure/sparsity." >> {log}
+        fi
+
+        rm -rf "${{wdir}}"
+        """
+
+rule qc_from_counts:
+    input:
+        tsv=out_path("binned", "{sample}.bins.tsv.gz"),
+        gc=WIN_GC_GZ,
+        alfred=out_path("alignment_summary_metrics.tsv")
+    output:
+        qc=out_path("qc-from-bins", "{sample}.counts_qc.tsv")
+    conda: "envs/py_env.yaml"
+    threads: 1
+    log:
+        out_path("logs", "{sample}.qc_from_counts.log")
+    params:
+        qc2_dir=DIR_QC2,
+        log_dir=DIR_LOGS
+    shell:
+        r"""
+        set -euo pipefail
+        mkdir -p {params.qc2_dir} {params.log_dir}
+        python -u workflow/scripts/qc_from_counts.py \
+          --counts {input.tsv} \
+          --sample {wildcards.sample} \
+          --gc-table {input.gc} \
+          --alfred-summary {input.alfred} \
+          --out {output.qc} > {log} 2>&1
+        """
+
+rule make_sample_final_qc:
+    input:
+        alfred=out_path("alignment_summary_metrics.tsv"),
+        qc2=expand(out_path("qc-from-bins", "{sample}.counts_qc.tsv"), sample=SAMPLES)
+    output:
+        final=out_path("final_qc.tsv")
+    threads: 2
+    resources:
+        mem_mb=20000,
+        partition="medium",
+        qos="normal",
+        time="02:00:00"
+    run:
+        import os, tempfile, pandas as pd
+        dfA = pd.read_csv(input.alfred, sep="\t")
+        rows = [pd.read_csv(p, sep="\t") for p in input.qc2]
+        dfQ = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=["Library"])
+        merged = dfA.merge(dfQ, on="Library", how="left")
+        odir = os.path.dirname(output.final)
+        os.makedirs(odir, exist_ok=True)
+        with tempfile.NamedTemporaryFile("w", delete=False, dir=odir, suffix=".tmp") as tf:
+            tmp = tf.name
+            merged.to_csv(tf, sep="\t", index=False)
+            tf.flush(); os.fsync(tf.fileno())
+        os.replace(tmp, output.final)
+
+# --------------------------- OPTIONAL PLOTTING -------------------------------
+rule plot_qc:
+    input:
+        final=out_path("final_qc.tsv"),
+        preseq=lambda wc: out_path("preseq", f"{wc.sample}.lc.tsv")
+    output:
+        pdf=out_path("plots", "per-lib-qc", "{sample}.qc.pdf")
+    threads: 1
+    resources:
+        mem_mb=4000,
+        partition="short",
+        qos="normal",
+        time="00:20:00",
+        tmpdir=TMP_DIR
+    conda: "envs/py_env.yaml"
+    log:
+        out_path("logs", "{sample}.plot_qc.log")
+    params:
+        plots_dir=DIR_PLOTS,
+        preseq_dir=DIR_PRESEQ
+    shell:
+        r"""
+        set -euo pipefail
+        mkdir -p {params.plots_dir} $(dirname {log}) "{resources.tmpdir}"
+
+        # Headless + safe font cache
+        export MPLBACKEND=Agg
+        export MPLCONFIGDIR="{resources.tmpdir}/{wildcards.sample}.mplcfg"
+        mkdir -p "$MPLCONFIGDIR"
+
+        # Optional: avoids numba trying to JIT on some clusters
+        export NUMBA_DISABLE_JIT=1
+
+        python -u workflow/scripts/plot_qc.py \
+          --final {input.final} \
+          --preseq_dir {params.preseq_dir} \
+          --outdir {params.plots_dir} \
+          --only {wildcards.sample} > {log} 2>&1
+        """
+
+rule plot_run_summary_R:
+    input:
+        final=out_path("final_qc.tsv")
+    output:
+        pdf=out_path("plots", "run_summary.pdf")
+    threads: 1
+    resources:
+        mem_mb=4000,
+        partition="short",
+        qos="normal",
+        time="00:20:00"
+    conda: "envs/r_plot.yaml"
+    log:
+        out_path("logs", "run_summary_R.log")
+    params:
+        count_col="total.read.count"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log})" "$(dirname {output.pdf})"
+        Rscript workflow/scripts/plot_summary.R \
+          --final {input.final} \
+          --out {output.pdf} \
+          --count-col '{params.count_col}' \
+          > {log} 2>&1
+        """
+
+# ==================== ASHLEYS-QC (auto-detect / normalize) ===================
+
+# Build a mapping from BAM basename ("cell") → Library (our sample id)
+rule write_library_map:
+    output: LIBMAP_TSV
+    run:
+        import os, pandas as pd
+        os.makedirs(os.path.dirname(output[0]), exist_ok=True)
+        rows = []
+        for lib, bam in BAM_OF.items():
+            cell = os.path.basename(bam)  # e.g. A5455_L2_1001.sort.mdup.bam
+            rows.append({"cell": cell, "Library": lib})
+        pd.DataFrame(rows).to_csv(output[0], sep="\t", index=False)
+
+# Merge existing Ashley features or compute them; then normalize to Library
+rule ashleys_labels_or_features:
+    output:
+        features = ASH_FEATURES
+    threads: ASH.get("threads", 32)
+    resources:
+        mem_mb = ASH.get("mem_mb", 200000),
+        partition = "highmem",
+        qos = "normal",
+        time = "1-00:00:00"
+    conda: ASH.get("conda_env", "envs/ashleys.yaml")
+    log:
+        out_path("ashleys", "logs", "features_or_labels.log")
+    params:
+        folder   = str(DATA_ROOT),
+        windows  = ash_win_str(),
+        extension= BAM_EXT,
+        bin      = ASH.get("bin", ASH_DEFAULT["bin"])
+    shell:
+        r"""
+        set -euo pipefail
+        mkdir -p "$(dirname {log})" "$(dirname {output.features})"
+
+        RUN_DIR="{config[data_location]}"
+        MODE="FLAT"
+        if find "$RUN_DIR" -mindepth 2 -maxdepth 2 -type d -name bam -print -quit | grep -q .; then
+          MODE="HIER"
+        fi
+
+        # Prefer merging any precomputed features if present
+        if [[ "$MODE" == "HIER" ]] && \
+           find "$RUN_DIR" -type f \( -path '*/predictions/ashleys_features.tsv' -o -path '*/prediction/ashleys_features.tsv' -o -path '*/predicitons/ashleys_features.tsv' \) -print -quit | grep -q .; then
+
+          TMP="{output.features}.tmp"
+          find "$RUN_DIR" -type f \
+            \( -path '*/predictions/ashleys_features.tsv' -o -path '*/prediction/ashleys_features.tsv' -o -path '*/predicitons/ashleys_features.tsv' \) \
+            -print | sort \
+            | xargs awk 'FNR==1 && NR>1 {{next}} {{print}}' > "$TMP"
+
+          test -s "$TMP"
+          mv -f "$TMP" "{output.features}"
+        else
+          # Compute features from BAMs
+          python -u "{params.bin}" -j {threads} features \
+            -f "{params.folder}" \
+            -w {params.windows} \
+            -o "{output.features}" \
+            --recursive_collect \
+            -e "{params.extension}" >> "{log}" 2>&1
+
+          test -s "{output.features}"
+        fi
+        """
+
+# Merge labels (if any) or predict from features, then normalize to Library
+rule ashleys_predict_or_copy:
+    input:
+        features = rules.ashleys_labels_or_features.output.features
+    output:
+        pred_dir = directory(ASH_PRED_DIR),
+        pred     = ASH_PRED_TSV
+    threads: max(1, ASH.get("threads", 32)//2)
+    resources:
+        mem_mb = max(20000, ASH.get("mem_mb", 200000)//2),
+        partition = "medium",
+        qos = "normal",
+        time = "04:00:00"
+    conda: ASH.get("conda_env", "envs/ashleys.yaml")
+    log:
+        out_path("ashleys", "logs", "predict_or_copy.log")
+    params:
+        bin   = ASH.get("bin", ASH_DEFAULT["bin"]),
+        model = ASH.get("model_path", ASH_DEFAULT["model_path"])
+    shell:
+        r"""
+        set -euo pipefail
+        RUN_DIR="{config[data_location]}"
+        mkdir -p "{output.pred_dir}" "$(dirname {log})"
+
+        # Try to merge any labels.tsv produced by upstream tools
+        if find "$RUN_DIR" -type f \
+             \( -path '*/cell_selection/labels.tsv' -o -path '*/predictions/labels.tsv' -o -path '*/prediction/labels.tsv' \) \
+             -print -quit | grep -q .; then
+
+          TMP="{output.pred}.tmp"
+          find "$RUN_DIR" -type f \
+            \( -path '*/cell_selection/labels.tsv' -o -path '*/predictions/labels.tsv' -o -path '*/prediction/labels.tsv' \) \
+            -print | sort \
+            | xargs awk 'FNR==1 && NR>1 {{next}} {{print}}' > "$TMP"
+
+          test -s "$TMP"
+          mv -f "$TMP" "{output.pred}"
+          exit 0
+        fi
+
+        # Fallback: run predict from features.tsv
+        python -u "{params.bin}" -j {threads} predict \
+          -p "{input.features}" \
+          -o "{output.pred_dir}" \
+          -m "{params.model}"
+
+        test -s "{output.pred}"
+        """
+
+
+# Final merge (R) with normalized Ashley tables; copy to results/
+rule merge_final_qc_with_ashleys:
+    input:
+        final = out_path("final_qc.tsv"),
+        pred  = out_path("ashleys/prediction/prediction.tsv"),
+        feat  = out_path("ashleys/features.tsv")
+    output:
+        merged = out_path("final_qc_with_ashleys.tsv")
+    log:
+        out_path("logs/merge_final_qc_with_ashleys.log")
+    conda:
+        "envs/R_merge.yaml"
+    shell:
+        r"""
+        set -euo pipefail
+        mkdir -p "$(dirname {log})" "$(dirname {output.merged})"
+
+        FEAT_ARG=""
+        [[ -s "{input.feat}" ]] && FEAT_ARG="--feat {input.feat}"
+
+        # Write directly to the declared output path; no copies afterwards.
+        Rscript workflow/scripts/merge_ashleys.R \
+          --final "{input.final}" \
+          --pred  "{input.pred}" \
+          ${{FEAT_ARG}} \
+          --out  "{output.merged}" \
+          > "{log}" 2>&1
+        """

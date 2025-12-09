@@ -1,0 +1,11 @@
+name: r_plot
+channels: [conda-forge, bioconda]
+dependencies:
+  - r-base>=4.2
+  - r-tidyverse
+  - r-patchwork
+  - r-scales
+  - r-metbrewer
+  - r-cairo
+  - fonts-conda-ecosystem  # better PDF text rendering
+  - r-ggpubr

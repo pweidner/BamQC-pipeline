@@ -1,0 +1,13 @@
+name: qc_py
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - pandas
+  - numpy
+  - samtools
+  - bedtools
+  - matplotlib
+  - seaborn        # optional, but nice for fancier plots
+  - reportlab      # optional, for PDF backend robustness

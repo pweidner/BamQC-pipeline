@@ -1,0 +1,12 @@
+name: R_merge
+channels: [conda-forge, bioconda]
+dependencies:
+  - r-base>=4.2
+  - r-readr
+  - r-dplyr
+  - r-stringr
+  - r-tibble
+  - r-argparse
+  - r-purrr
+  - r-tidyr
+

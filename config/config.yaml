@@ -1,5 +1,22 @@
-data_location: "path/to/bam/folder"
-ref: "hg38"  # Specify the desired reference genome ("hg38", "mm10", or "T2T")
-output_location: "path/to/output/folder"
-default_profile: "workflow/profiles"
+# -------- Core IO --------
+data_location: "/data/cephfs-1/scratch/groups/sanders/kiwi_tmp/BRDU-OP-ADCR11/ADCR11/bam"
+output_location: "/data/cephfs-1/scratch/groups/sanders/kiwi_tmp/BRDU-OP-ADCR11/bamqc"
+
+# -------- Reference --------
+ref: "hg38"  # or "mm10", "T2T"
 reference_path: "/data/cephfs-1/home/users/pweidne_m/work/mosaicatcher-pipeline-BIH/workflow/data/ref_genomes"
+window: 200000
+bam_ext: ".sort.mdup.bam"
+tmp_dir: "/data/cephfs-1/scratch/groups/sanders/kiwi_tmp/tmp"
+# -------- Plots --------
+plot: False
+
+# -------- External Ashley launcher (Option A) --------
+ashleys:
+  enabled: true
+  bin: "/data/cephfs-1/home/users/pweidne_m/work/ashleys-qc/bin/ashleys.py"
+  model_path: "/data/cephfs-1/home/users/pweidne_m/work/ashleys-qc/models/svc_default.pkl"
+  win_sizes: [5000000,2000000,1000000,800000,600000,400000,200000]
+  threads: 32
+  mem_mb: 200000
+  conda_env: "envs/ashleys.yaml"

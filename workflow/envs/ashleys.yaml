@@ -1,0 +1,33 @@
+name: ashleys
+channels:
+  - conda-forge
+  - bioconda
+
+dependencies:
+  # ----- Python stack -----
+  - python
+  - numpy=1.19.1         # safe for most libs, avoids NumPy 2.x surprises
+  - pandas               # wide compatibility with older code
+  - scipy=1.5.2         # matches the numpy pin well
+  - scikit-learn=0.23.2   # adjust if the .pkl complains (see note below)
+  - joblib               # sklearn model loading
+  - pyyaml
+  - tqdm
+  - click                # many CLIs use click; cheap to have
+  - typer                # some use typer instead; cheap to have
+  
+  # ----- Bio I/O -----
+  - pysam         # BAM access if the CLI uses pysam
+  - pytest
+  - samtools=1.17        # for quickcheck + indices
+  - htslib=1.17
+  - bedtools=2.31.*      # just in case the CLI shells out to it
+  - pigz                 # faster bgzip if used
+  - setuptools
+
+  # ----- Python plotting (rarely needed but harmless) -----
+  - matplotlib
+
+  - pip:
+    - tqdm
+    - -e /data/cephfs-1/home/users/pweidne_m/work/ashleys-qc

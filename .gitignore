@@ -1,4 +1,5 @@
 # ————————————————————————— Snakemake internals
+.snakemake
 .snakemake/                    # Snakemake’s working directory
 **/.snakemake/                 # any nested .snakemake folders
 
