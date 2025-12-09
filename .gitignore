@@ -1,11 +1,12 @@
 # ————————————————————————— Snakemake internals
-.snakemake
-.snakemake/                    # Snakemake’s working directory
-**/.snakemake/                 # any nested .snakemake folders
+.snakemake/
+*/.snakemake/
 
 # ————————————————————————— Pipeline logs & errors
-logs/                          # rule‐level log files
-errors/                        # Snakemake‐generated error captures
+logs/
+*/logs/                          # rule‐level log files
+errors/
+*/errors/                        # Snakemake‐generated error captures
 
 # ————————————————————————— Scheduler & cluster outputs
 # (SLURM, SGE, PBS, etc.)
