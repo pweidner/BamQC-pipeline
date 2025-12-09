@@ -42,3 +42,5 @@ Thumbs.db                      # Windows
 .vscode/                       # VSCode workspace settings
 .idea/                         # JetBrains IDE settings
 
+.snakemake/
+*/.snakemake/
