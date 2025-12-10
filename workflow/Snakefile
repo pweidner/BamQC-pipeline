@@ -36,43 +36,56 @@ ASH = {**ASH_DEFAULT, **config.get("ashleys", {})}
 ASH_ENABLED = _bool(ASH.get("enabled", True))
 
 # -------------------------- Discover BAMs (auto) --------------------------
-# Supports:
-#  - FLAT mode: DATA_ROOT contains *.bam directly
-#  - HIER mode: DATA_ROOT/<SAMPLE>/bam/*.bam
-#
-# Sample IDs are guaranteed unique:
-#  - FLAT mode: sample = <bam_basename-without-ext>
-#  - HIER mode: sample = <SAMPLEDIR>_<bam_basename-without-ext>
-#
 def discover_bams(root: Path, bam_ext: str):
+    """
+    Discover BAM files in either:
+      - FLAT mode: root contains *.bam_ext directly
+      - HIER mode: root contains child directories with a direct 'bam' subfolder
+
+    Returns:
+        mode: "FLAT" or "HIER"
+        bam_of: dict mapping sample_id -> bam path
+    """
     mode = None
-    bam_of = {}  # sample_id -> bam_path
+    bam_of = {}  # sample_id -> bam path
+
     if not root.exists():
         print(f"[ERROR] data_location does not exist: {root}", file=sys.stderr)
         sys.exit(2)
 
-    # FLAT?
+    # ---------- FLAT MODE ----------
     flat = sorted(root.glob(f"*{bam_ext}"))
     if flat:
         mode = "FLAT"
         for b in flat:
-            sid = b.name[:-len(bam_ext)]
+            sid = b.stem  # removes suffix cleanly
             bam_of[sid] = str(b)
-    else:
-        # HIER: look for immediate children with a 'bam' folder
-        mode = "HIER"
-        for child in sorted(p for p in root.iterdir() if p.is_dir()):
-            bamdir = child / "bam"
-            if not bamdir.is_dir():
-                continue
-            for b in sorted(bamdir.glob(f"*{bam_ext}")):
-                sid = f"{child.name}_{b.name[:-len(bam_ext)]}"
-                bam_of[sid] = str(b)
+        return mode, bam_of
 
+    # ---------- HIER MODE ----------
+    mode = "HIER"
+    for child in sorted(p for p in root.iterdir() if p.is_dir()):
+        bamdir = child / "bam"
+        if not bamdir.is_dir():
+            # Skip folders like "log", "config", etc.
+            continue
+
+        bams = sorted(bamdir.glob(f"*{bam_ext}"))
+        if not bams:
+            # Ignore empty bam/ directories
+            continue
+
+        for b in bams:
+            sid = f"{child.name}_{b.stem}"
+            bam_of[sid] = str(b)
+
+    # ---------- ERROR IF NOTHING FOUND ----------
     if not bam_of:
-        print(f"[ERROR] No BAMs found under {root}. "
-              f"Looked for pattern '*{bam_ext}' in FLAT mode or '*/bam/*{bam_ext}' in HIER mode.",
-              file=sys.stderr)
+        print(
+            f"[ERROR] No BAMs found under {root}. "
+            f"Looked for '*{bam_ext}' in FLAT mode or '*/bam/*{bam_ext}' in HIER mode.",
+            file=sys.stderr,
+        )
         sys.exit(3)
 
     return mode, bam_of
