@@ -365,7 +365,12 @@ rule preseq_lc:
         log_dir=DIR_LOGS
     shell:
         r"""
-        set -euo pipefail
+        # Snakemake's jobscript uses: set -euo pipefail
+        # → we MUST explicitly disable -e and pipefail here.
+        set +e
+        set +o pipefail
+        set -u
+
         mkdir -p {params.preseq_dir} {params.log_dir} {resources.tmpdir}
         wdir="{resources.tmpdir}/{wildcards.sample}.preseq"
         mkdir -p "${{wdir}}"
@@ -376,33 +381,38 @@ rule preseq_lc:
         frgs="${{wdir}}/5.fragments.sorted.bed"
 
         echo "[which]" >> {log}
-        command -v samtools bedtools preseq >> {log}
-        preseq 2>&1 | head -n 3 >> {log}
+        (command -v samtools bedtools preseq >> {log}) || echo "[which] command -v failed" >> {log}
+        preseq 2>&1 | head -n 3 >> {log} || echo "[preseq] version call failed" >> {log}
 
-        samtools view -@ {threads} -b -F 2304 {input.bam} -o "${{pbam}}" >> {log} 2>&1
-        samtools sort -@ {threads} -n -o "${{nbam}}" "${{pbam}}" >> {log} 2>&1
-        bedtools bamtobed -bedpe -i "${{nbam}}" > "${{bedpe}}" 2>> {log}
+        samtools view -@ {threads} -b -F 2304 {input.bam} -o "${{pbam}}" >> {log} 2>&1 || echo "[ERROR] samtools view failed" >> {log}
+        samtools sort -@ {threads} -n -o "${{nbam}}" "${{pbam}}" >> {log} 2>&1 || echo "[ERROR] samtools sort failed" >> {log}
+        bedtools bamtobed -bedpe -i "${{nbam}}" > "${{bedpe}}" 2>> {log} || echo "[ERROR] bedtools bamtobed failed" >> {log}
 
         awk 'BEGIN{{OFS="\t"}} $1==$4 && $2!=-1 && $5!=-1 {{ s=($2<$5)?$2:$5; e=($3>$6)?$3:$6; if(e>s) print $1,s,e; }}' \
-            "${{bedpe}}" > "${{frag}}"
+            "${{bedpe}}" > "${{frag}}" || echo "[ERROR] awk fragment generation failed" >> {log}
 
-        LC_ALL=C sort -k1,1 -k2,2n -k3,3n "${{frag}}" > "${{frgs}}"
+        LC_ALL=C sort -k1,1 -k2,2n -k3,3n "${{frag}}" > "${{frgs}}" || echo "[ERROR] sort fragments failed" >> {log}
 
-        maxdup=$(awk 'BEGIN{{FS=OFS="\t"}} {{k=$1":"$2"-"$3; c[k]++}} END{{m=0; for(k in c) if(c[k]>m) m=c[k]; print m+0}}' "${{frgs}}")
-        nfrag=$(wc -l < "${{frgs}}")
-        echo "[dup_spectrum] fragments=${{nfrag}} max_dup=${{maxdup}}" >> {log}
+        if [[ -s "${{frgs}}" ]]; then
+          maxdup=$(awk 'BEGIN{{FS=OFS="\t"}} {{k=$1":"$2"-"$3; c[k]++}} END{{m=0; for(k in c) if(c[k]>m) m=c[k]; print m+0}}' "${{frgs}}")
+          nfrag=$(wc -l < "${{frgs}}")
+          echo "[dup_spectrum] fragments=${{nfrag}} max_dup=${{maxdup}}" >> {log}
 
-        if [[ "${{nfrag}}" -lt 1000 ]]; then
-          echo "[preseq] Too few fragments (<1000). Using -D -Q fallback." >> {log}
-          preseq lc_extrap -D -Q -o {output.tsv} "${{frgs}}" >> {log} 2>&1 || true
-        elif [[ "${{maxdup}}" -lt 4 ]]; then
-          echo "[preseq] Sparse duplicate spectrum (max_dup<4). Using -D -Q fallback." >> {log}
-          preseq lc_extrap -D -Q -o {output.tsv} "${{frgs}}" >> {log} 2>&1 || true
+          if [[ "${{nfrag}}" -lt 1000 ]]; then
+            echo "[preseq] Too few fragments (<1000). Using -D -Q fallback." >> {log}
+            preseq lc_extrap -D -Q -o {output.tsv} "${{frgs}}" >> {log} 2>&1 || echo "[preseq] lc_extrap -D -Q failed" >> {log}
+          elif [[ "${{maxdup}}" -lt 4 ]]; then
+            echo "[preseq] Sparse duplicate spectrum (max_dup<4). Using -D -Q fallback." >> {log}
+            preseq lc_extrap -D -Q -o {output.tsv} "${{frgs}}" >> {log} 2>&1 || echo "[preseq] lc_extrap -D -Q failed" >> {log}
+          else
+            echo "[preseq] Running standard lc_extrap." >> {log}
+            preseq lc_extrap -o {output.tsv} "${{frgs}}" >> {log} 2>&1 || echo "[preseq] standard lc_extrap failed" >> {log}
+          fi
         else
-          echo "[preseq] Running standard lc_extrap." >> {log}
-          preseq lc_extrap -o {output.tsv} "${{frgs}}" >> {log} 2>&1 || true
+          echo "[preseq] No fragments produced – skipping lc_extrap." >> {log}
         fi
 
+        # SAFETY NET: always produce something
         if [[ ! -s "{output.tsv}" ]]; then
           echo -e "TOTAL_READS\tEXPECTED_DISTINCT\tLOWER_0.95CI\tUPPER_0.95CI" > {output.tsv}
           echo -e "0\t0\t0\t0" >> {output.tsv}

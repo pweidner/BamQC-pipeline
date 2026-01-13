@@ -24,7 +24,7 @@ max-jobs-per-second: 100
 max-status-checks-per-second: 100
 local-cores: 1
 latency-wait: 60
-jobs: 100
+jobs: 500
 
 use-conda: true
 conda-frontend: "mamba"
