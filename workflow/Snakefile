@@ -90,10 +90,10 @@ def discover_bams(root: Path, bam_ext: str):
 
     return mode, bam_of
 
-print(f"[INFO] DATA_ROOT={DATA_ROOT}")
-print(f"[INFO] BAM_EXT={BAM_EXT!r}")
-print(f"[INFO] FLAT pattern={f'*{BAM_EXT}'!r}")
-print(f"[INFO] HIER pattern={f'*/bam/*{BAM_EXT}'!r}")
+#print(f"[INFO] DATA_ROOT={DATA_ROOT}")
+#print(f"[INFO] BAM_EXT={BAM_EXT!r}")
+#print(f"[INFO] FLAT pattern={f'*{BAM_EXT}'!r}")
+#print(f"[INFO] HIER pattern={f'*/bam/*{BAM_EXT}'!r}")
 
 MODE, BAM_OF = discover_bams(DATA_ROOT, BAM_EXT)
 SAMPLES = sorted(BAM_OF.keys())
