@@ -15,8 +15,8 @@ A fast, reproducible **Snakemake** workflow for **QC of BAMs** — alignment sta
 ## ⚙️ 1. Installation
 
 ```bash
-git clone https://github.com/pweidner/BamQC-pipeline.git
-cd BamQC-pipeline
+git clone https://github.com/pweidner/bamqc-pipeline.git
+cd bamqc-pipeline
 mamba create -n snakemake snakemake=7.32.0 -y
 conda activate snakemake
 ```
