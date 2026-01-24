@@ -13,11 +13,34 @@ suppressPackageStartupMessages({
 strip_bam <- function(x) {
   x <- basename(x)
   x <- str_replace(x, "\\.sort\\.mdup\\.bam$", "")
+  x <- str_replace(x, "\\.sort\\.mdup$", "")
   x <- str_replace(x, "\\.mdup\\.bam$", "")
+  x <- str_replace(x, "\\.mdup$", "")
   x <- str_replace(x, "\\.sort\\.bam$", "")
+  x <- str_replace(x, "\\.sort$", "")
   x <- str_replace(x, "\\.bam$", "")
   x
 }
+
+# Find a column in df by case-insensitive match
+find_col_ci <- function(df, candidates) {
+  nm <- names(df)
+  low <- tolower(nm)
+  for (cand in candidates) {
+    hit <- which(low == tolower(cand))
+    if (length(hit) > 0) return(nm[hit[1]])
+  }
+  return(NULL)
+}
+
+# Remove a literal prefix if present (vectorized)
+remove_literal_prefix <- function(x, prefix) {
+  ok <- !is.na(prefix) & startsWith(x, prefix)
+  x2 <- x
+  x2[ok] <- substr(x[ok], nchar(prefix[ok]) + 1, nchar(x[ok]))
+  x2
+}
+
 
 # robust reader
 read_tsv_quiet <- function(path, ...) {
@@ -31,10 +54,11 @@ normalize_pred_keys <- function(pred) {
   if (length(miss) > 0) {
     stop("prediction.tsv missing required columns: ", paste(miss, collapse=", "))
   }
+
   pred %>%
     mutate(
-      Base    = strip_bam(.data$cell),
-      Library = paste0(.data$sample, "_", .data$Base)
+      Base    = strip_bam(.data$cell),                 # A5573_L1_i301
+      Library = paste0(.data$sample, "_", .data$Base, ".sort.mdup")
     )
 }
 
@@ -156,28 +180,78 @@ message("[merge_ashleys] Reading inputs ...")
 final <- read_tsv_quiet(final_path)
 pred  <- read_tsv_quiet(pred_path)
 
-# Normalize keys
-pred  <- normalize_pred_keys(pred)
-final <- final %>% mutate(Base = sub("^[^_]+_", "", .data$Library))
+# ---- Normalize final keys (Base, Sample, and a joinable Library key) ----
+lib_col <- find_col_ci(final, c("Library"))
+if (is.null(lib_col)) stop("[merge_ashleys] final_qc.tsv missing 'Library' column")
 
-# Left-join Ashley prediction
+samp_col <- find_col_ci(final, c("sample", "Sample", "SAMPLE"))
+
+final <- final %>%
+  mutate(
+    Library_raw = .data[[lib_col]],
+    Sample_raw  = if (!is.null(samp_col)) .data[[samp_col]] else NA_character_
+  )
+
+# Compute Base
+if (!is.null(samp_col)) {
+  prefix <- paste0(final$Sample_raw, "_")
+  lib_no_prefix <- remove_literal_prefix(final$Library_raw, prefix)
+  final <- final %>% mutate(Base = strip_bam(lib_no_prefix))
+} else {
+  final <- final %>% mutate(Base = str_extract(.data$Library_raw, "A\\d+_L\\d+_i\\d+"))
+}
+
+# Compute Sample if missing
+if (is.null(samp_col)) {
+  final <- final %>% mutate(
+    Sample_raw = str_replace(.data$Library_raw, "_A\\d+_L\\d+_i\\d+.*$", "")
+  )
+}
+
+# Build normalized join key
+final <- final %>% mutate(
+  Library_key = paste0(.data$Sample_raw, "_", .data$Base, ".sort.mdup")
+)
+
+# ---- Normalize prediction keys to match final ----
+pred <- normalize_pred_keys(pred) %>%
+  mutate(Library_key = .data$Library)
+
+message("[merge_ashleys] Key examples:")
+message("  final Library_raw: ", final$Library_raw[1])
+message("  final Sample_raw : ", final$Sample_raw[1])
+message("  final Base       : ", final$Base[1])
+message("  final Library_key: ", final$Library_key[1])
+message("  pred  Library_key: ", pred$Library_key[1])
+
+# ---- Join predictions (ONLY ONCE) ----
 message("[merge_ashleys] Joining Ashley predictions ...")
-# don't include Base here to avoid Base.x/Base.y suffixing
-keep_pred <- c("Library","prediction","probability","sample","cell")
+keep_pred <- c("Library_key","prediction","probability","sample","cell")
 pred_min  <- pred %>% select(any_of(keep_pred))
-merged    <- final %>% left_join(pred_min, by = "Library")
+merged    <- final %>% left_join(pred_min, by = "Library_key")
 
-# Optionally join Ashley features (by Base)
+message("[merge_ashleys] Matched predictions: ", sum(!is.na(merged$prediction)), " / ", nrow(merged))
+
+# ---- Join Ashley features (by Base) ----
 if (!is.null(feat_path) && file.exists(feat_path) && file.info(feat_path)$size > 0) {
   message("[merge_ashleys] Joining Ashley features ...")
   feat <- read_tsv_quiet(feat_path)
-  feat <- normalize_feat_keys(feat)
+
+  feat <- normalize_feat_keys(feat)  # adds Base from sample_name/cell via strip_bam()
   if (!is.null(feat)) {
-    # Avoid column name explosions: prefix feature columns except the key we join on
+    # Prefix all feature columns except the join key to avoid name collisions
     feat_pref <- feat %>%
-      mutate(Base = strip_bam(Base)) %>%
+      # keep Base unprefixed
       rename_with(.cols = setdiff(names(feat), c("Base")), .fn = ~ paste0("feat_", .x))
+
     merged <- merged %>% left_join(feat_pref, by = "Base")
+
+    # quick sanity: count how many rows got any non-NA feature value
+    feat_cols <- grep("^feat_", names(merged), value = TRUE)
+    if (length(feat_cols) > 0) {
+      n_feat_rows <- sum(rowSums(!is.na(merged[, feat_cols, drop = FALSE])) > 0)
+      message("[merge_ashleys] Rows with >=1 feature value: ", n_feat_rows, " / ", nrow(merged))
+    }
   } else {
     message("[merge_ashleys] Skipping features merge (no usable key).")
   }

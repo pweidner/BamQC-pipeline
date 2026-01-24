@@ -2,13 +2,22 @@
 configfile: "config/config.yaml"
 
 # =========================== Imports & helpers ============================
-import os, sys, glob
+import os, sys, glob, re
 from pathlib import Path
 
 def _bool(x, default=False):
     if x is None: return default
     if isinstance(x, bool): return x
     return str(x).lower() in ("1","true","yes","y","on")
+
+def sanitize_suffix(x, default):
+    if x is None:
+        x = default
+    x = str(x)
+    # normalize Unicode whitespace (incl NBSP) and remove *all* surrounding whitespace
+    x = x.replace("\u00A0", " ")
+    x = re.sub(r"\s+", "", x)   # removes any whitespace characters anywhere
+    return x
 
 # -------------------- Read config with sensible defaults ------------------
 DATA_ROOT   = Path(config["data_location"]).resolve()
@@ -19,7 +28,7 @@ REF_FASTA   = str(REF_BASE / f"{REF_NAME}.fa")
 WIN_SIZE    = int(config.get("window", 200000))
 PLOT_TOGGLE = _bool(config.get("plot", False))
 
-BAM_EXT = config.get("bam_ext", ".sort.mdup.bam").strip()
+BAM_EXT = sanitize_suffix(config.get("bam_ext"), ".sort.mdup.bam")
 TMP_DIR     = str(config.get("tmp_dir", "/data/cephfs-1/scratch/groups/sanders/kiwi_tmp/tmp"))
 
 # Ashley defaults + overrides
@@ -44,10 +53,17 @@ def discover_bams(root: Path, bam_ext: str):
 
     Returns:
         mode: "FLAT" or "HIER"
-        bam_of: dict mapping sample_id -> bam path
+        bam_of: dict mapping library_id -> bam path
     """
+    import re
+
+    def strip_bam_suffix(name: str) -> str:
+        """Remove .bam and common pipeline suffixes but keep .sort.mdup"""
+        name = re.sub(r"\.bam$", "", name)
+        return name
+
     mode = None
-    bam_of = {}  # sample_id -> bam path
+    bam_of = {}  # library_id -> bam path
 
     if not root.exists():
         print(f"[ERROR] data_location does not exist: {root}", file=sys.stderr)
@@ -58,7 +74,7 @@ def discover_bams(root: Path, bam_ext: str):
     if flat:
         mode = "FLAT"
         for b in flat:
-            sid = b.stem  # removes suffix cleanly
+            sid = strip_bam_suffix(b.name)   # keep full stem incl sort.mdup
             bam_of[sid] = str(b)
         return mode, bam_of
 
@@ -72,43 +88,49 @@ def discover_bams(root: Path, bam_ext: str):
 
         bams = sorted(bamdir.glob(f"*{bam_ext}"))
         if not bams:
-            # Ignore empty bam/ directories
             continue
 
         for b in bams:
-            sid = f"{child.name}_{b.stem}"
+            bam_base = strip_bam_suffix(b.name)   # A5573_L1_i301.sort.mdup
+            sid = f"{child.name}_{bam_base}"      # SAMPLE_A5573_L1_i301.sort.mdup
+
+            if sid in bam_of:
+                print(
+                    f"[WARN] Duplicate library ID {sid}\n"
+                    f"  old: {bam_of[sid]}\n"
+                    f"  new: {b}",
+                    file=sys.stderr,
+                )
+
             bam_of[sid] = str(b)
 
     # ---------- ERROR IF NOTHING FOUND ----------
     if not bam_of:
         print(
             f"[ERROR] No BAMs found under {root}. "
-            f"Looked for '*{bam_ext}' in FLAT mode or '*/bam/*{bam_ext}' in HIER mode.",
+            f"Looked for '*{bam_ext}' in FLAT mode or '*/bam/*{bam_ext}' in HIER mode. "
+            f"(bam_ext repr={bam_ext!r})",
             file=sys.stderr,
         )
-        sys.exit(3)
 
     return mode, bam_of
-
-#print(f"[INFO] DATA_ROOT={DATA_ROOT}")
-#print(f"[INFO] BAM_EXT={BAM_EXT!r}")
-#print(f"[INFO] FLAT pattern={f'*{BAM_EXT}'!r}")
-#print(f"[INFO] HIER pattern={f'*/bam/*{BAM_EXT}'!r}")
 
 MODE, BAM_OF = discover_bams(DATA_ROOT, BAM_EXT)
 SAMPLES = sorted(BAM_OF.keys())
 
 # ================================= ASCII Art =================================
 print(r"""
- /$$$$$$$                           /$$$$$$   /$$$$$$        /$$$$$$$  /$$$$$$ /$$   /$$
-| $$__  $$                         /$$__  $$ /$$__  $$      | $$__  $$|_  $$_/| $$  | $$
-| $$  \ $$  /$$$$$$  /$$$$$$/$$$$ | $$  \ $$| $$  \__/      | $$  \ $$  | $$  | $$  | $$
-| $$$$$$$  |____  $$| $$_  $$_  $$| $$  | $$| $$            | $$$$$$$   | $$  | $$$$$$$$
-| $$__  $$  /$$$$$$$| $$ \ $$ \ $$| $$  | $$| $$            | $$__  $$  | $$  | $$__  $$
-| $$  \ $$ /$$__  $$| $$ | $$ | $$| $$/$$ $$| $$    $$      | $$  \ $$  | $$  | $$  | $$
-| $$$$$$$/|  $$$$$$$| $$ | $$ | $$|  $$$$$$/|  $$$$$$/      | $$$$$$$/ /$$$$$$| $$  | $$
-|_______/  \_______/|__/ |__/ |__/ \____ $$$ \______/       |_______/ |______/|__/  |__/
-                                        \__/
+ /$$                                                                    /$$                     /$$ /$$                    
+| $$                                                                   |__/                    | $$|__/                    
+| $$$$$$$   /$$$$$$  /$$$$$$/$$$$   /$$$$$$   /$$$$$$$         /$$$$$$  /$$  /$$$$$$   /$$$$$$ | $$ /$$ /$$$$$$$   /$$$$$$ 
+| $$__  $$ |____  $$| $$_  $$_  $$ /$$__  $$ /$$_____//$$$$$$ /$$__  $$| $$ /$$__  $$ /$$__  $$| $$| $$| $$__  $$ /$$__  $$
+| $$  \ $$  /$$$$$$$| $$ \ $$ \ $$| $$  \ $$| $$     |______/| $$  \ $$| $$| $$  \ $$| $$$$$$$$| $$| $$| $$  \ $$| $$$$$$$$
+| $$  | $$ /$$__  $$| $$ | $$ | $$| $$  | $$| $$             | $$  | $$| $$| $$  | $$| $$_____/| $$| $$| $$  | $$| $$_____/
+| $$$$$$$/|  $$$$$$$| $$ | $$ | $$|  $$$$$$$|  $$$$$$$       | $$$$$$$/| $$| $$$$$$$/|  $$$$$$$| $$| $$| $$  | $$|  $$$$$$$
+|_______/  \_______/|__/ |__/ |__/ \____  $$ \_______/       | $$____/ |__/| $$____/  \_______/|__/|__/|__/  |__/ \_______/
+                                        | $$                 | $$          | $$                                            
+                                        | $$                 | $$          | $$                                            
+                                        |__/                 |__/          |__/                                            
 """)
 print("Starting BamQC pipeline...\n")
 
