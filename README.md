@@ -14,10 +14,13 @@ A fast, reproducible **Snakemake** workflow for **QC of BAMs** — alignment sta
 
 ## ⚙️ 1. Installation
 
-Clone the repo into your work folder:
+Clone the repos into your work folder (note that the pipeline needs ashleys-qc repo as well):
 
 ```bash
+cd
+cd work/
 git clone https://github.com/pweidner/bamqc-pipeline.git
+git clone https://github.com/friendsofstrandseq/ashleys-qc.git
 cd bamqc-pipeline
 ```
 
