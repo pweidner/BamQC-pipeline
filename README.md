@@ -57,7 +57,7 @@ ashleys:
   conda_env: envs/ashleys.yaml
 ```
 
-**Discovery modes**
+**Discovery modes (note you can adjust bam_ext: ".sort.mdup.bam" in the config)**
 - **FLAT**: `data_location/*.sort.mdup.bam`
 - **HIER**: `data_location/<SAMPLE>/bam/*.sort.mdup.bam`  
   → auto-detected.
