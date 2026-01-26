@@ -196,17 +196,35 @@ def main():
     complexity_saturation  = np.nan
     if args.preseq and os.path.exists(args.preseq):
         try:
-            # Expect 2 cols: total_reads  distinct_reads (preseq lc_extrap default)
-            pdf = pd.read_csv(args.preseq, sep="\t", comment="#", header=None, names=["total","distinct"])
-            if pdf.shape[0] > 0:
-                # observed depth ~ closest to sum of mapped (if provided in Alfred),
-                # but we don't have it here; use max row as proxy
-                last = pdf.iloc[-1]
-                if last["total"] > 0:
-                    complexity_at_observed = float(last["distinct"])
-                    complexity_saturation  = float(last["distinct"] / last["total"])
+            # Try to read headered preseq files first
+            p_df = pd.read_csv(args.preseq, sep="\t", comment="#")
+            if {"TOTAL_READS", "EXPECTED_DISTINCT"}.issubset(set(p_df.columns)):
+                total_col = "TOTAL_READS"
+                distinct_col = "EXPECTED_DISTINCT"
+                # use the row nearest to observed total if possible (but we don't have observed reads here)
+                last = p_df.loc[~p_df[total_col].isna()].iloc[-1]
+                tot = float(last[total_col])
+                distinct = float(last[distinct_col])
+                if tot > 0:
+                    complexity_at_observed = distinct
+                    complexity_saturation  = distinct / tot
+            else:
+                # fallback: headerless two-column file (total, distinct)
+                p_df2 = pd.read_csv(args.preseq, sep="\t", comment="#", header=None)
+                # require at least 2 columns and some numeric data
+                if p_df2.shape[1] >= 2:
+                    # take last row with numeric values
+                    numeric_rows = p_df2.applymap(lambda x: pd.to_numeric(x, errors="coerce")).dropna(how='all')
+                    if numeric_rows.shape[0] > 0:
+                        last = numeric_rows.iloc[-1]
+                        tot = float(last.iloc[0])
+                        distinct = float(last.iloc[1])
+                        if tot > 0:
+                            complexity_at_observed = distinct
+                            complexity_saturation  = distinct / tot
         except Exception as e:
-            print(f"[qc_from_counts] Warning reading {args.preseq}: {e}", file=sys.stderr)
+            print(f"[qc_from_counts] Warning reading preseq file {args.preseq}: {e}", file=sys.stderr)
+
 
     # Assemble one-row output
     out = {
@@ -217,18 +235,12 @@ def main():
         "avg.read.count": avg_read_count,
         "spikiness": spike,
         "entropy": ent,
-        # coverage variability
         "coverage_gini": gini,
         "coverage_cv": coeff_var,
         "coverage_mad": abs_mad,
         "coverage_sd": sd_cov,
-        # uniformity
         "fold80_penalty": fold80,
-        # GC-bias
         "gc_pearson_r": gc_r,
-        # optional extras
-        "MedianInsertSize": median_insert_size,
-        "MedianMAPQ": median_mapq,
         "preseq_distinct_at_observed": complexity_at_observed,
         "preseq_saturation": complexity_saturation,
     }

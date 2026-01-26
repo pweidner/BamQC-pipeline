@@ -120,17 +120,17 @@ SAMPLES = sorted(BAM_OF.keys())
 
 # ================================= ASCII Art =================================
 print(r"""
- /$$                                                                    /$$                     /$$ /$$                    
-| $$                                                                   |__/                    | $$|__/                    
-| $$$$$$$   /$$$$$$  /$$$$$$/$$$$   /$$$$$$   /$$$$$$$         /$$$$$$  /$$  /$$$$$$   /$$$$$$ | $$ /$$ /$$$$$$$   /$$$$$$ 
-| $$__  $$ |____  $$| $$_  $$_  $$ /$$__  $$ /$$_____//$$$$$$ /$$__  $$| $$ /$$__  $$ /$$__  $$| $$| $$| $$__  $$ /$$__  $$
-| $$  \ $$  /$$$$$$$| $$ \ $$ \ $$| $$  \ $$| $$     |______/| $$  \ $$| $$| $$  \ $$| $$$$$$$$| $$| $$| $$  \ $$| $$$$$$$$
-| $$  | $$ /$$__  $$| $$ | $$ | $$| $$  | $$| $$             | $$  | $$| $$| $$  | $$| $$_____/| $$| $$| $$  | $$| $$_____/
-| $$$$$$$/|  $$$$$$$| $$ | $$ | $$|  $$$$$$$|  $$$$$$$       | $$$$$$$/| $$| $$$$$$$/|  $$$$$$$| $$| $$| $$  | $$|  $$$$$$$
-|_______/  \_______/|__/ |__/ |__/ \____  $$ \_______/       | $$____/ |__/| $$____/  \_______/|__/|__/|__/  |__/ \_______/
-                                        | $$                 | $$          | $$                                            
-                                        | $$                 | $$          | $$                                            
-                                        |__/                 |__/          |__/                                            
+ /$$                                                                    /$$                     /$$ /$$                                       /$$$$$$       /$$  
+| $$                                                                   |__/                    | $$|__/                                      /$$$_  $$    /$$$$  
+| $$$$$$$   /$$$$$$  /$$$$$$/$$$$   /$$$$$$   /$$$$$$$         /$$$$$$  /$$  /$$$$$$   /$$$$$$ | $$ /$$ /$$$$$$$   /$$$$$$        /$$    /$$| $$$$\ $$   |_  $$  
+| $$__  $$ |____  $$| $$_  $$_  $$ /$$__  $$ /$$_____//$$$$$$ /$$__  $$| $$ /$$__  $$ /$$__  $$| $$| $$| $$__  $$ /$$__  $$      |  $$  /$$/| $$ $$ $$     | $$  
+| $$  \ $$  /$$$$$$$| $$ \ $$ \ $$| $$  \ $$| $$     |______/| $$  \ $$| $$| $$  \ $$| $$$$$$$$| $$| $$| $$  \ $$| $$$$$$$$       \  $$/$$/ | $$\ $$$$     | $$  
+| $$  | $$ /$$__  $$| $$ | $$ | $$| $$  | $$| $$             | $$  | $$| $$| $$  | $$| $$_____/| $$| $$| $$  | $$| $$_____/        \  $$$/  | $$ \ $$$     | $$  
+| $$$$$$$/|  $$$$$$$| $$ | $$ | $$|  $$$$$$$|  $$$$$$$       | $$$$$$$/| $$| $$$$$$$/|  $$$$$$$| $$| $$| $$  | $$|  $$$$$$$         \  $/   |  $$$$$$//$$ /$$$$$$
+|_______/  \_______/|__/ |__/ |__/ \____  $$ \_______/       | $$____/ |__/| $$____/  \_______/|__/|__/|__/  |__/ \_______/          \_/     \______/|__/|______/
+                                        | $$                 | $$          | $$                                                                                  
+                                        | $$                 | $$          | $$                                                                                  
+                                        |__/                 |__/          |__/                                                                                  
 """)
 print("Starting BamQC pipeline...\n")
 
@@ -453,11 +453,18 @@ rule qc_from_counts:
     input:
         tsv=out_path("binned", "{sample}.bins.tsv.gz"),
         gc=WIN_GC_GZ,
+        preseq=out_path("preseq", "{sample}.lc.tsv"),
         alfred=out_path("alignment_summary_metrics.tsv")
     output:
         qc=out_path("qc-from-bins", "{sample}.counts_qc.tsv")
     conda: "envs/py_env.yaml"
     threads: 1
+    resources:
+        mem_mb=4000,
+        partition="short",
+        qos="normal",
+        time="01:30:00",
+        tmpdir=TMP_DIR
     log:
         out_path("logs", "{sample}.qc_from_counts.log")
     params:
@@ -472,6 +479,7 @@ rule qc_from_counts:
           --sample {wildcards.sample} \
           --gc-table {input.gc} \
           --alfred-summary {input.alfred} \
+          --preseq {input.preseq} \
           --out {output.qc} > {log} 2>&1
         """
 
@@ -488,11 +496,152 @@ rule make_sample_final_qc:
         qos="normal",
         time="02:00:00"
     run:
-        import os, tempfile, pandas as pd
+        import os, re, tempfile, pandas as pd
+
+        def snake(s: str) -> str:
+            s = s.strip()
+            s = s.replace(".", "_")
+            s = re.sub(r"[^A-Za-z0-9_]+", "_", s)
+            s = re.sub(r"__+", "_", s)
+            return s.strip("_").lower()
+
+        # --- Alfred rename map (explicit; deterministic) ---
+        alf_map = {
+            "#QCFail": "alf_qcfail_n",
+            "QCFailFraction": "alf_qcfail_frac",
+            "#DuplicateMarked": "alf_duplicate_marked_n",
+            "DuplicateFraction": "alf_duplicate_frac",
+            "#Unmapped": "alf_unmapped_n",
+            "UnmappedFraction": "alf_unmapped_frac",
+            "#Mapped": "alf_mapped_n",
+            "MappedFraction": "alf_mapped_frac",
+            "#MappedRead1": "alf_mapped_read1_n",
+            "#MappedRead2": "alf_mapped_read2_n",
+            "RatioMapped2vsMapped1": "alf_mapped2_vs_mapped1_ratio",
+            "#MappedForward": "alf_mapped_forward_n",
+            "MappedForwardFraction": "alf_mapped_forward_frac",
+            "#MappedReverse": "alf_mapped_reverse_n",
+            "MappedReverseFraction": "alf_mapped_reverse_frac",
+            "#SecondaryAlignments": "alf_secondary_alignments_n",
+            "SecondaryAlignmentFraction": "alf_secondary_alignments_frac",
+            "#SupplementaryAlignments": "alf_supplementary_alignments_n",
+            "SupplementaryAlignmentFraction": "alf_supplementary_alignments_frac",
+            "#SplicedAlignments": "alf_spliced_alignments_n",
+            "SplicedAlignmentFraction": "alf_spliced_alignments_frac",
+            "#Pairs": "alf_pairs_n",
+            "#MappedPairs": "alf_mapped_pairs_n",
+            "MappedPairsFraction": "alf_mapped_pairs_frac",
+            "#MappedSameChr": "alf_mapped_same_chr_n",
+            "MappedSameChrFraction": "alf_mapped_same_chr_frac",
+            "#MappedProperPair": "alf_mapped_proper_pair_n",
+            "MappedProperFraction": "alf_mapped_proper_pair_frac",
+            "#ReferenceBp": "alf_reference_bp",
+            "#ReferenceNs": "alf_reference_ns",
+            "#AlignedBases": "alf_aligned_bp",
+            "#MatchedBases": "alf_matched_bp",
+            "MatchRate": "alf_match_frac",
+            "#MismatchedBases": "alf_mismatched_bp",
+            "MismatchRate": "alf_mismatch_frac",
+            "#DeletionsCigarD": "alf_deletions_d_n",
+            "DeletionRate": "alf_deletion_frac",
+            "HomopolymerContextDel": "alf_homopolymer_context_del",
+            "#InsertionsCigarI": "alf_insertions_i_n",
+            "InsertionRate": "alf_insertion_frac",
+            "HomopolymerContextIns": "alf_homopolymer_context_ins",
+            "#SoftClippedBases": "alf_soft_clipped_bp",
+            "SoftClipRate": "alf_soft_clip_frac",
+            "#HardClippedBases": "alf_hard_clipped_bp",
+            "HardClipRate": "alf_hard_clip_frac",
+            "ErrorRate": "alf_error_frac",
+            "MedianReadLength": "alf_read_length_med",
+            "DefaultLibraryLayout": "alf_library_layout_default",
+            "MedianInsertSize": "alf_insert_size_med",
+            "MedianCoverage": "alf_coverage_med",
+            "SDCoverage": "alf_coverage_sd",
+            "CoveredBp": "alf_covered_bp",
+            "FractionCovered": "alf_covered_frac",
+            "BpCov1ToCovNRatio": "alf_bp_cov1_to_covn_ratio",
+            "BpCov1ToCov2Ratio": "alf_bp_cov1_to_cov2_ratio",
+            "MedianMAPQ": "alf_mapq_med",
+        }
+
+        # --- Bin qc rename map (explicit; deterministic) ---
+        bin_map = {
+            "n.bins": "bin_n_bins",
+            "avg.binsize": "bin_avg_binsize",
+            "total.read.count": "bin_total_read_count",
+            "avg.read.count": "bin_avg_read_count",
+            "spikiness": "bin_spikiness",
+            "entropy": "bin_entropy",
+            "coverage_gini": "bin_gini",
+            "coverage_cv": "bin_cv",
+            "coverage_mad": "bin_mad",
+            "coverage_sd": "bin_sd",
+            "fold80_penalty": "bin_fold80",
+            "gc_pearson_r": "bin_gc_r",
+            "pct_ge_1x": "bin_pct_ge_1x",
+            "pct_ge_10x": "bin_pct_ge_10x",
+            "pct_ge_30x": "bin_pct_ge_30x",
+            # Keep preseq fields as-is (already your chosen prefix)
+            "preseq_distinct_at_observed": "preseq_distinct_at_observed",
+            "preseq_saturation": "preseq_saturation",
+        }
+
+        # Read inputs
         dfA = pd.read_csv(input.alfred, sep="\t")
         rows = [pd.read_csv(p, sep="\t") for p in input.qc2]
         dfQ = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=["Library"])
+
+        # Ensure keys exist
+        if "Library" not in dfA.columns:
+            raise ValueError("[make_sample_final_qc] alignment_summary_metrics.tsv lacks 'Library'")
+        if "Sample" not in dfA.columns:
+            # If Sample ever disappears from Alfred ME extraction, keep pipeline alive
+            dfA["Sample"] = dfA["Library"].astype(str).str.replace(r"_A\d+_L\d+_i\d+.*$", "", regex=True)
+
+        # Rename Alfred columns (keep Library/Sample)
+        a_ren = {}
+        for c in dfA.columns:
+            if c in ("Library", "Sample"):
+                continue
+            if c in alf_map:
+                a_ren[c] = alf_map[c]
+            else:
+                # fallback: prefix and snake-case unknown alfred columns
+                a_ren[c] = "alf_" + snake(c)
+        dfA = dfA.rename(columns=a_ren)
+
+        # Drop redundant duplicates from bin table if still present
+        # (after you patch qc_from_counts.py, these should be gone)
+        for redundant in ("MedianInsertSize", "MedianMAPQ"):
+            if redundant in dfQ.columns:
+                dfQ = dfQ.drop(columns=[redundant])
+
+        # Rename bin columns (keep Library)
+        q_ren = {}
+        for c in dfQ.columns:
+            if c == "Library":
+                continue
+            if c in bin_map:
+                q_ren[c] = bin_map[c]
+            else:
+                # fallback: prefix + snake-case
+                # if it already starts with preseq_, keep it stable
+                if c.startswith("preseq_"):
+                    q_ren[c] = snake(c)  # enforce snake
+                else:
+                    q_ren[c] = "bin_" + snake(c)
+        dfQ = dfQ.rename(columns=q_ren)
+
+        # Merge
         merged = dfA.merge(dfQ, on="Library", how="left")
+
+        # Column order: IDs first
+        id_cols = ["Library", "Sample"]
+        other_cols = [c for c in merged.columns if c not in id_cols]
+        merged = merged[id_cols + other_cols]
+
+        # Atomic write
         odir = os.path.dirname(output.final)
         os.makedirs(odir, exist_ok=True)
         with tempfile.NamedTemporaryFile("w", delete=False, dir=odir, suffix=".tmp") as tf:
@@ -500,6 +649,7 @@ rule make_sample_final_qc:
             merged.to_csv(tf, sep="\t", index=False)
             tf.flush(); os.fsync(tf.fileno())
         os.replace(tmp, output.final)
+
 
 # --------------------------- OPTIONAL PLOTTING -------------------------------
 rule plot_qc:

@@ -8,8 +8,6 @@ suppressPackageStartupMessages({
   library(purrr)
 })
 
-# ------------------------------- Helpers ------------------------------------
-
 strip_bam <- function(x) {
   x <- basename(x)
   x <- str_replace(x, "\\.sort\\.mdup\\.bam$", "")
@@ -20,6 +18,10 @@ strip_bam <- function(x) {
   x <- str_replace(x, "\\.sort$", "")
   x <- str_replace(x, "\\.bam$", "")
   x
+}
+
+read_tsv_quiet <- function(path, ...) {
+  readr::read_tsv(path, guess_max = 1e6, show_col_types = FALSE, progress = FALSE, ...)
 }
 
 # Find a column in df by case-insensitive match
@@ -41,28 +43,21 @@ remove_literal_prefix <- function(x, prefix) {
   x2
 }
 
-
-# robust reader
-read_tsv_quiet <- function(path, ...) {
-  readr::read_tsv(path, guess_max = 1e6, show_col_types = FALSE, progress = FALSE, ...)
-}
-
-# Build Library key in prediction.tsv: Library = paste0(sample, "_", strip_bam(cell))
+# Normalize Ashley prediction keys → Library_key that matches our Library format
 normalize_pred_keys <- function(pred) {
   need <- c("cell","sample")
   miss <- setdiff(need, names(pred))
   if (length(miss) > 0) {
     stop("prediction.tsv missing required columns: ", paste(miss, collapse=", "))
   }
-
   pred %>%
     mutate(
-      Base    = strip_bam(.data$cell),                 # A5573_L1_i301
-      Library = paste0(.data$sample, "_", .data$Base, ".sort.mdup")
+      Base        = strip_bam(.data$cell),                     # A5573_L1_i301
+      Library_key = paste0(.data$sample, "_", .data$Base, ".sort.mdup")
     )
 }
 
-# Add Base key to features: prefer 'sample_name', else 'cell'
+# Normalize Ashley features keys → Base
 normalize_feat_keys <- function(feat) {
   nm <- names(feat)
   key <- dplyr::case_when(
@@ -77,91 +72,21 @@ normalize_feat_keys <- function(feat) {
   feat %>% mutate(Base = strip_bam(.data[[key]]))
 }
 
-# Read a preseq curve for a Library (if present) and coerce key cols numeric
-read_preseq_curve <- function(preseq_dir, lib) {
-  f <- file.path(preseq_dir, paste0(lib, ".lc.tsv"))
-  if (!file.exists(f)) return(NULL)
-  df <- tryCatch(read_tsv_quiet(f), error = function(e) NULL)
-  if (is.null(df)) return(NULL)
-
-  # Be tolerant to column types; coerce and keep only needed cols if present
-  need <- c("TOTAL_READS","EXPECTED_DISTINCT")
-  if (!all(need %in% names(df))) return(NULL)
-
-  df <- df %>%
-    mutate(
-      TOTAL_READS       = suppressWarnings(as.numeric(.data$TOTAL_READS)),
-      EXPECTED_DISTINCT = suppressWarnings(as.numeric(.data$EXPECTED_DISTINCT))
-    )
-
-  # Drop completely NA rows on both required columns
-  df <- df %>% filter(!(is.na(TOTAL_READS) & is.na(EXPECTED_DISTINCT)))
-  if (nrow(df) == 0) return(NULL)
-  df
+# Normalize Ashley feature column names into safe snake-ish keys (but keep meaning)
+normalize_ash_feature_name <- function(nm) {
+  nm2 <- tolower(nm)
+  nm2 <- str_replace_all(nm2, "\\.", "_")
+  # collapse x.0mb -> xmb for 5.0 / 2.0 / 1.0 specifically
+  nm2 <- str_replace_all(nm2, "5_0mb", "5mb")
+  nm2 <- str_replace_all(nm2, "2_0mb", "2mb")
+  nm2 <- str_replace_all(nm2, "1_0mb", "1mb")
+  # for decimals like 0.8mb -> 0_8mb etc already handled by '.'->'_'
+  nm2 <- str_replace_all(nm2, "__+", "_")
+  nm2 <- str_replace_all(nm2, "^_+|_+$", "")
+  nm2
 }
 
-# Given a curve df and observed total reads, pick nearest point (no tidyr needed)
-preseq_metrics_from_curve <- function(cur, observed_reads) {
-  na_metrics <- tibble(
-    preseq_distinct_at_observed = NA_real_,
-    preseq_saturation           = NA_real_
-  )
-
-  if (is.null(cur) || !is.finite(observed_reads) || observed_reads <= 0) {
-    return(na_metrics)
-  }
-
-  # If both columns are zero/NA everywhere, treat as degenerate
-  all_zero_or_na <- {
-    tr  <- cur$TOTAL_READS
-    ed  <- cur$EXPECTED_DISTINCT
-    # zeros or NAs only?
-    (all(is.na(tr) | tr == 0) && all(is.na(ed) | ed == 0))
-  }
-  if (all_zero_or_na) return(na_metrics)
-
-  # Find nearest row by TOTAL_READS (ignore NA)
-  cur_ok <- cur %>% filter(is.finite(TOTAL_READS))
-  if (nrow(cur_ok) == 0) return(na_metrics)
-
-  idx <- which.min(abs(cur_ok$TOTAL_READS - observed_reads))
-  distinct <- suppressWarnings(as.numeric(cur_ok$EXPECTED_DISTINCT[idx]))
-
-  if (!is.finite(distinct) || observed_reads <= 0) return(na_metrics)
-
-  tibble(
-    preseq_distinct_at_observed = distinct,
-    preseq_saturation           = distinct / observed_reads
-  )
-}
-
-
-# Vectorized wrapper over a final table
-attach_preseq_metrics <- function(final_df, out_root) {
-  # Expect a numeric total.read.count and a Library ID
-  if (!("Library" %in% names(final_df))) {
-    warning("[merge_ashleys] final table lacks 'Library'; skipping preseq enrichment.")
-    return(final_df)
-  }
-  trc <- "total.read.count"
-  if (!(trc %in% names(final_df))) {
-    warning("[merge_ashleys] final table lacks 'total.read.count'; skipping preseq enrichment.")
-    return(final_df)
-  }
-  preseq_dir <- file.path(out_root, "preseq")
-
-  enrich_row <- function(lib, obs) {
-    cur <- read_preseq_curve(preseq_dir, lib)
-    preseq_metrics_from_curve(cur, obs)
-  }
-
-  mets <- map2_dfr(final_df$Library, suppressWarnings(as.numeric(final_df[[trc]])), enrich_row)
-  bind_cols(final_df, mets)
-}
-
-# ----------------------------- CLI & I/O -------------------------------------
-
-ap <- argparse::ArgumentParser(description = "Merge final QC with Ashley prediction (and optional features), and enrich with preseq metrics.")
+ap <- argparse::ArgumentParser(description = "Merge final QC with Ashley prediction (and optional features).")
 ap$add_argument("--final", required = TRUE, help = "Path to final_qc.tsv")
 ap$add_argument("--pred",  required = TRUE, help = "Path to ashleys/prediction/prediction.tsv")
 ap$add_argument("--feat",  required = FALSE, default = NULL, help = "Optional path to ashleys/features.tsv")
@@ -171,87 +96,62 @@ args <- ap$parse_args()
 final_path <- normalizePath(args$final, mustWork = TRUE)
 pred_path  <- normalizePath(args$pred,  mustWork = TRUE)
 feat_path  <- if (!is.null(args$feat)) normalizePath(args$feat, mustWork = FALSE) else NULL
-out_path   <- args$out
-
-# OUT_ROOT = dirname(final_qc.tsv)
-OUT_ROOT <- dirname(final_path)
 
 message("[merge_ashleys] Reading inputs ...")
 final <- read_tsv_quiet(final_path)
 pred  <- read_tsv_quiet(pred_path)
 
-# ---- Normalize final keys (Base, Sample, and a joinable Library key) ----
-lib_col <- find_col_ci(final, c("Library"))
-if (is.null(lib_col)) stop("[merge_ashleys] final_qc.tsv missing 'Library' column")
-
-samp_col <- find_col_ci(final, c("sample", "Sample", "SAMPLE"))
+# ---- Prepare keys on final ----
+lib_col  <- find_col_ci(final, c("Library"))
+samp_col <- find_col_ci(final, c("Sample"))
+if (is.null(lib_col))  stop("[merge_ashleys] final_qc.tsv missing 'Library' column")
+if (is.null(samp_col)) stop("[merge_ashleys] final_qc.tsv missing 'Sample' column")
 
 final <- final %>%
   mutate(
     Library_raw = .data[[lib_col]],
-    Sample_raw  = if (!is.null(samp_col)) .data[[samp_col]] else NA_character_
+    Sample_raw  = .data[[samp_col]]
   )
 
-# Compute Base
-if (!is.null(samp_col)) {
-  prefix <- paste0(final$Sample_raw, "_")
-  lib_no_prefix <- remove_literal_prefix(final$Library_raw, prefix)
-  final <- final %>% mutate(Base = strip_bam(lib_no_prefix))
-} else {
-  final <- final %>% mutate(Base = str_extract(.data$Library_raw, "A\\d+_L\\d+_i\\d+"))
-}
+# Base = remove "<Sample>_" prefix from Library, then strip suffixes
+prefix <- paste0(final$Sample_raw, "_")
+lib_no_prefix <- remove_literal_prefix(final$Library_raw, prefix)
+final <- final %>% mutate(Base = strip_bam(lib_no_prefix))
 
-# Compute Sample if missing
-if (is.null(samp_col)) {
-  final <- final %>% mutate(
-    Sample_raw = str_replace(.data$Library_raw, "_A\\d+_L\\d+_i\\d+.*$", "")
-  )
-}
+# Build Library_key matching Ashley normalization
+final <- final %>% mutate(Library_key = paste0(.data$Sample_raw, "_", .data$Base, ".sort.mdup"))
 
-# Build normalized join key
-final <- final %>% mutate(
-  Library_key = paste0(.data$Sample_raw, "_", .data$Base, ".sort.mdup")
-)
-
-# ---- Normalize prediction keys to match final ----
-pred <- normalize_pred_keys(pred) %>%
-  mutate(Library_key = .data$Library)
-
-message("[merge_ashleys] Key examples:")
-message("  final Library_raw: ", final$Library_raw[1])
-message("  final Sample_raw : ", final$Sample_raw[1])
-message("  final Base       : ", final$Base[1])
-message("  final Library_key: ", final$Library_key[1])
-message("  pred  Library_key: ", pred$Library_key[1])
-
-# ---- Join predictions (ONLY ONCE) ----
+# ---- Join predictions ----
 message("[merge_ashleys] Joining Ashley predictions ...")
-keep_pred <- c("Library_key","prediction","probability","sample","cell")
-pred_min  <- pred %>% select(any_of(keep_pred))
-merged    <- final %>% left_join(pred_min, by = "Library_key")
+pred2 <- normalize_pred_keys(pred)
 
-message("[merge_ashleys] Matched predictions: ", sum(!is.na(merged$prediction)), " / ", nrow(merged))
+pred_min <- pred2 %>%
+  transmute(
+    Library_key = .data$Library_key,
+    ash_cell    = .data$cell,
+    ash_sample  = .data$sample,
+    ash_label   = .data$prediction,
+    ash_prob    = .data$probability
+  )
 
-# ---- Join Ashley features (by Base) ----
+merged <- final %>% left_join(pred_min, by = "Library_key")
+message("[merge_ashleys] Matched predictions: ", sum(!is.na(merged$ash_label)), " / ", nrow(merged))
+
+# ---- Join features (optional) ----
 if (!is.null(feat_path) && file.exists(feat_path) && file.info(feat_path)$size > 0) {
   message("[merge_ashleys] Joining Ashley features ...")
   feat <- read_tsv_quiet(feat_path)
+  feat <- normalize_feat_keys(feat)
 
-  feat <- normalize_feat_keys(feat)  # adds Base from sample_name/cell via strip_bam()
   if (!is.null(feat)) {
-    # Prefix all feature columns except the join key to avoid name collisions
+    # Prefix all feature columns except join key; normalize names
+    feat_cols <- setdiff(names(feat), c("Base"))
     feat_pref <- feat %>%
-      # keep Base unprefixed
-      rename_with(.cols = setdiff(names(feat), c("Base")), .fn = ~ paste0("feat_", .x))
+      mutate(Base = strip_bam(.data$Base)) %>%
+      rename_with(.cols = all_of(feat_cols), .fn = ~ paste0("ash_", normalize_ash_feature_name(.x)))
 
     merged <- merged %>% left_join(feat_pref, by = "Base")
-
-    # quick sanity: count how many rows got any non-NA feature value
-    feat_cols <- grep("^feat_", names(merged), value = TRUE)
-    if (length(feat_cols) > 0) {
-      n_feat_rows <- sum(rowSums(!is.na(merged[, feat_cols, drop = FALSE])) > 0)
-      message("[merge_ashleys] Rows with >=1 feature value: ", n_feat_rows, " / ", nrow(merged))
-    }
+    message("[merge_ashleys] Feature columns added: ", length(setdiff(names(feat_pref), "Base")))
   } else {
     message("[merge_ashleys] Skipping features merge (no usable key).")
   }
@@ -259,48 +159,28 @@ if (!is.null(feat_path) && file.exists(feat_path) && file.info(feat_path)$size >
   message("[merge_ashleys] No features file supplied or empty; skipping features merge.")
 }
 
-# [preseq skipped] Do not enrich with preseq metrics for now.
-message("[merge_ashleys] Skipping preseq enrichment (requested).")
+# Drop helper columns if you don't want them in final output
+# Comment these out if you prefer to keep debug columns.
+merged <- merged %>% select(-Library_raw, -Sample_raw, -Base, -Library_key)
 
-# Robust/atomic write: write to tmp, verify, then rename to final
+# Atomic write
 out_path <- normalizePath(args$out, mustWork = FALSE)
 out_dir  <- dirname(out_path)
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
-# add a little context into the log
-message("[merge_ashleys] Writing (atomic) to: ", out_path)
-message("[merge_ashleys] getwd(): ", getwd())
-
+message("[merge_ashleys] Writing to: ", out_path)
 tmp_path <- paste0(out_path, ".tmp")
-
-# write tmp
 readr::write_tsv(merged, tmp_path)
 
-# verify tmp exists and is non-empty
-if (!file.exists(tmp_path)) {
-  stop("[merge_ashleys] ERROR: tmp not found after write: ", tmp_path)
+if (!file.exists(tmp_path) || file.size(tmp_path) <= 0) {
+  stop("[merge_ashleys] ERROR: tmp file missing/empty: ", tmp_path)
 }
-sz <- tryCatch(file.size(tmp_path), error = function(e) NA_real_)
-if (!is.finite(sz) || sz <= 0) {
-  stop("[merge_ashleys] ERROR: tmp file is empty: ", tmp_path)
-}
-
-# move tmp -> final (atomic on same filesystem)
 ok <- file.rename(tmp_path, out_path)
 if (!isTRUE(ok)) {
-  # fallback for weird FS semantics
   file.copy(tmp_path, out_path, overwrite = TRUE)
   unlink(tmp_path)
 }
-
-# verify final exists and is non-empty
-if (!file.exists(out_path)) {
-  stop("[merge_ashleys] ERROR: final not found after write: ", out_path)
+if (!file.exists(out_path) || file.size(out_path) <= 0) {
+  stop("[merge_ashleys] ERROR: final file missing/empty: ", out_path)
 }
-final_sz <- tryCatch(file.size(out_path), error = function(e) NA_real_)
-if (!is.finite(final_sz) || final_sz <= 0) {
-  stop("[merge_ashleys] ERROR: final file is empty: ", out_path)
-}
-
-message("[merge_ashleys] Wrote OK (", final_sz, " bytes): ", out_path)
 message("[merge_ashleys] Done.")
