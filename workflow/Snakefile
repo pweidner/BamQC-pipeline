@@ -22,9 +22,13 @@ def sanitize_suffix(x, default):
 # -------------------- Read config with sensible defaults ------------------
 DATA_ROOT   = Path(config["data_location"]).resolve()
 OUT_ROOT    = Path(config["output_location"]).resolve()
-REF_NAME    = config.get("ref", "hg38")
-REF_BASE    = Path(config.get("reference_path", ".")).resolve()
-REF_FASTA   = str(REF_BASE / f"{REF_NAME}.fa")
+REF_NAME = str(config.get("ref", "hg38")).strip()
+REF_BASE = str(config.get("reference_path", "")).strip()
+if not REF_BASE:
+    raise ValueError("[CONFIG ERROR] 'reference_path' must be set in config.yaml")
+
+REF_FASTA = f"{REF_BASE}/{REF_NAME}.fa"
+
 WIN_SIZE    = int(config.get("window", 200000))
 PLOT_TOGGLE = _bool(config.get("plot", False))
 
@@ -151,7 +155,8 @@ print(r"""
                                         |__/                 |__/          |__/                                                                                  
 """)
 print("Starting BamQC pipeline...\n")
-
+# Helpful startup print (shows EXACT string used)
+print(f"[CONFIG] Using reference: {REF_NAME} ({REF_FASTA})", file=sys.stderr)
 print("\n=== BamQC: input discovery ===")
 print(f"- Mode: {MODE}")
 print(f"- data_location: {DATA_ROOT}")
