@@ -70,108 +70,104 @@ ASH_ENABLED = _bool(ASH.get("enabled", True))
 # -------------------------- Discover BAMs (FLAT / HIER via find) --------------------------
 def discover_bams(root: Path, bam_ext: str):
     """
-    Discover BAM files using 'find' (no recursive Python fallback).
-    Two layouts supported:
-      - FLAT:  <data_root>/*<bam_ext>
-      - HIER:  <data_root>/*/bam/*<bam_ext>
+    Discover BAMs using 'find' in two layouts:
+      - FLAT: <root>/*<ext>            (maxdepth 1)
+      - HIER: <root>/*/bam/*<ext>      (search each child/<bam> with maxdepth 1)
 
-    Returns:
-        mode: "FLAT" or "HIER" or (None, {}) on error
-        bam_of: dict mapping library_id -> absolute bam path
+    Returns (mode, bam_of) where bam_of maps LibraryID -> absolute bam path.
+
+    Notes:
+    - Accepts comma-separated bam_ext (e.g. ".sort.mdup.bam,.mdup.bam,.bam").
+    - Preserves basename suffixes like ".sort.mdup" (we only strip the final ".bam").
     """
     import subprocess, shlex
 
-    def sanitize_id(s: str) -> str:
-        # keep it short and safe for snakemake wildcards
+    def strip_only_trailing_bam(name: str) -> str:
+        # remove only a trailing ".bam" if present, keep other dots (e.g. ".sort.mdup")
+        if name.endswith(".bam"):
+            return name[:-4]
+        return name
+
+    def sanitize_for_wildcard(s: str) -> str:
+        # minimal sanitization to produce safe Snakemake wildcards but preserve name shape
         s = s.replace("\u00A0", " ")
         s = s.strip()
         s = re.sub(r"\s+", "_", s)
+        # keep dot and dash and underscore and alnum
         s = re.sub(r"[^A-Za-z0-9._-]+", "_", s)
         s = re.sub(r"_+", "_", s)
         return s.strip("_")
 
-    def try_find(pattern: str, maxdepth: int = None):
-        # use find to match files exactly; return list of Path
-        # pattern e.g. '* .sort.mdup.bam' (no shell expansion here)
-        cmd = ["find", str(root)]
-        if maxdepth is not None:
-            cmd += ["-maxdepth", str(maxdepth)]
-        cmd += ["-type", "f", "-name", pattern]
+    def run_find(path: str, maxdepth: int, name_pattern: str):
+        cmd = ["find", path, "-maxdepth", str(maxdepth), "-type", "f", "-name", name_pattern]
         try:
-            out = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, text=True)
-            if out.returncode not in (0, 1):  # 1 = no matches for some find implementations
-                # still try to parse output; but warn
-                print(f"[discover_bams] find exited {out.returncode}: {out.stderr.strip()}", file=sys.stderr)
-            paths = [Path(p) for p in out.stdout.splitlines() if p.strip()]
-            return sorted(paths)
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+            if proc.stderr:
+                # don't fail; just log
+                print(f"[discover_bams] find stderr: {proc.stderr.strip()}", file=sys.stderr)
+            lines = [l for l in proc.stdout.splitlines() if l.strip()]
+            return [Path(l) for l in sorted(lines)]
         except Exception as e:
             print(f"[discover_bams] find invocation failed: {e}", file=sys.stderr)
             return []
 
-    # quick existence check
+    # quick check
     if not root.exists():
         print(f"[ERROR] data_location does not exist: {root}", file=sys.stderr)
         return None, {}
 
-    # Accept comma-separated alternatives in BAM_EXT (user responsibility)
-    exts = [x.strip() for x in BAM_EXT.split(",") if x.strip()]
+    # Parse bam_ext (comma-separated allowed)
+    exts = [x.strip() for x in str(bam_ext or "").split(",") if x.strip()]
     if not exts:
         exts = [".sort.mdup.bam"]
 
-    # ---------- FLAT ----------
+    # normalize ext to start with a dot
+    exts = [e if e.startswith(".") else "." + e for e in exts]
+
+    # ---------- FLAT: maxdepth 1 ----------
     for ext in exts:
-        pat = f"*{ext}"
-        found = try_find(pat, maxdepth=1)
+        pattern = f"*{ext}"           # <-- CAREFUL: no space between * and ext
+        found = run_find(str(root), maxdepth=1, name_pattern=pattern)
         if found:
             bam_of = {}
             for p in found:
-                sid = sanitize_id(p.name.replace(ext, ""))  # remove ext exact match
+                base = p.name
+                sid_raw = strip_only_trailing_bam(base)   # preserves .sort.mdup etc.
+                sid = sanitize_for_wildcard(sid_raw)
+                if sid in bam_of:
+                    # rare duplicate: append short hash
+                    sid = f"{sid}_{str(abs(hash(str(p))))[:6]}"
                 bam_of[sid] = str(p.resolve())
-            print(f"[discover_bams] FLAT: found {len(bam_of)} files (ext={ext})", file=sys.stderr)
-            print(f"[discover_bams] examples: {list(bam_of.keys())[:6]}", file=sys.stderr)
+            print(f"[discover_bams] FLAT: found {len(bam_of)} bams (ext={ext})", file=sys.stderr)
+            print(f"[discover_bams] FLAT examples: {list(bam_of.keys())[:8]}", file=sys.stderr)
             return "FLAT", bam_of
 
-    # ---------- HIER (childdir/bam/*) ----------
+    # ---------- HIER: look for <child>/bam/*<ext> (child maxdepth 2 search) ----------
     bam_of = {}
-    # iterate direct children and look for child/bam/*ext
     for child in sorted(p for p in root.iterdir() if p.is_dir()):
         bamdir = child / "bam"
         if not bamdir.is_dir():
             continue
         for ext in exts:
-            pat = f"*{ext}"
-            # use find limited to this bamdir
-            try:
-                out = subprocess.run(["find", str(bamdir), "-maxdepth", "1", "-type", "f", "-name", pat],
-                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, text=True)
-                hits = [Path(p) for p in out.stdout.splitlines() if p.strip()]
-            except Exception as e:
-                hits = []
-                print(f"[discover_bams] find failed on {bamdir}: {e}", file=sys.stderr)
-            for p in hits:
+            pattern = f"*{ext}"
+            found = run_find(str(bamdir), maxdepth=1, name_pattern=pattern)
+            for p in found:
                 base = p.name
-                # remove ext exactly once
-                if base.endswith(ext):
-                    bam_base = base[: -len(ext)]
-                else:
-                    bam_base = re.sub(r"\.bam$", "", base)
+                bam_base = strip_only_trailing_bam(base)   # e.g. A5573_L1_i301.sort.mdup
                 sid_raw = f"{child.name}_{bam_base}"
-                sid = sanitize_id(sid_raw)
+                sid = sanitize_for_wildcard(sid_raw)
                 if sid in bam_of:
-                    print(f"[WARN] duplicate sid {sid} (old: {bam_of[sid]}, new: {p})", file=sys.stderr)
-                    # append short hash to preserve uniqueness
                     sid = f"{sid}_{str(abs(hash(str(p))))[:6]}"
                 bam_of[sid] = str(p.resolve())
 
     if bam_of:
-        print(f"[discover_bams] HIER: found {len(bam_of)} files under child/*/bam", file=sys.stderr)
-        print(f"[discover_bams] examples: {list(bam_of.keys())[:6]}", file=sys.stderr)
+        print(f"[discover_bams] HIER: found {len(bam_of)} bams under child/*/bam", file=sys.stderr)
+        print(f"[discover_bams] HIER examples: {list(bam_of.keys())[:8]}", file=sys.stderr)
         return "HIER", bam_of
 
-    # nothing found -> fail fast with clear guidance
-    print(f"[ERROR] No BAMs found under {root}. Searched for extensions: {exts}", file=sys.stderr)
-    print("[ERROR] Expected layout: FLAT: <data_root>/*<ext>  OR  HIER: <data_root>/<sample>/bam/*<ext>", file=sys.stderr)
-    print("[ERROR] If your BAMs live elsewhere, set 'data_location' to that directory or change 'bam_ext' in config.yaml.", file=sys.stderr)
+    # nothing found
+    print(f"[ERROR] No BAMs found under {root}. Searched extensions: {exts}", file=sys.stderr)
+    print("[ERROR] Expected FLAT: <data_root>/*<ext> OR HIER: <data_root>/<sample>/bam/*<ext>", file=sys.stderr)
     return None, {}
 
 MODE, BAM_OF = discover_bams(DATA_ROOT, BAM_EXT)
