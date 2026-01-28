@@ -29,7 +29,7 @@ WIN_SIZE    = int(config.get("window", 200000))
 PLOT_TOGGLE = _bool(config.get("plot", False))
 
 BAM_EXT = sanitize_suffix(config.get("bam_ext"), ".sort.mdup.bam")
-TMP_DIR     = str(config.get("tmp_dir", "/data/cephfs-1/scratch/groups/sanders/kiwi_tmp/tmp"))
+TMP_DIR     = str(config.get("tmp_dir", "/data/cephfs-1/scratch/groups/sanders/tmp"))
 
 # Ashley defaults + overrides
 ASH_DEFAULT = {
@@ -81,14 +81,14 @@ def discover_bams(root: Path, bam_ext: str):
         return None, {}
 
     # Ensure bam_ext is exactly what user configured (avoid adding spaces)
-    be = str(bam_ext or "")
+    be = str(bam_ext or "").strip()
     if be == "":
         print("[discover_bams] Warning: bam_ext empty; defaulting to '.sort.mdup.bam'", file=sys.stderr)
         be = ".sort.mdup.bam"
 
     # ---------- FLAT ----------
     # pattern must be e.g. "*.sort.mdup.bam" (no space between * and ext)
-    pattern = f"*{be}"
+    pattern = "*" + be
     flat = run_find(str(root), maxdepth=1, name_pattern=pattern)
     if flat:
         mode = "FLAT"
