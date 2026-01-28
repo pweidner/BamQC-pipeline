@@ -267,7 +267,7 @@ rule aggregate_alignment_metrics:
 
 rule make_windows:
     input:
-        fai=f"{REF_FASTA}.fai"
+        fai=REF_FASTA + ".fai"
     output:
         bed=WIN_BED_GZ
     conda: "envs/qc_env.yaml"
