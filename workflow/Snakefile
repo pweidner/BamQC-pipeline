@@ -22,14 +22,37 @@ def sanitize_suffix(x, default):
 # -------------------- Read config with sensible defaults ------------------
 DATA_ROOT   = Path(config["data_location"]).resolve()
 OUT_ROOT    = Path(config["output_location"]).resolve()
-REF_NAME    = config.get("ref", "hg38")
-REF_BASE    = Path(config.get("reference_path", ".")).resolve()
-REF_FASTA   = str(REF_BASE / f"{REF_NAME}.fa")
 WIN_SIZE    = int(config.get("window", 200000))
 PLOT_TOGGLE = _bool(config.get("plot", False))
 
-BAM_EXT = sanitize_suffix(config.get("bam_ext"), ".sort.mdup.bam")
-TMP_DIR     = str(config.get("tmp_dir", "/data/cephfs-1/scratch/groups/sanders/kiwi_tmp/tmp"))
+# If the user provides an explicit path to the fasta, use it *exactly* as given.
+# This puts responsibility on the user to provide a correct path (with quoting
+# in config if it has spaces). If not provided, fall back to old ref_name/ref_base behavior.
+REF_FASTA_CONF = config.get("reference_fasta", None)
+if REF_FASTA_CONF:
+    # Use exactly what the user wrote (no stripping or normalization)
+    REF_FASTA = str(REF_FASTA_CONF)
+    # Derive a REF_NAME for prints only (best-effort)
+    REF_NAME = Path(REF_FASTA).stem
+else:
+    REF_NAME    = config.get("ref", "hg38")
+    REF_BASE    = Path(config.get("reference_path", ".")).resolve()
+    REF_FASTA   = str(REF_BASE / f"{REF_NAME}.fa")
+
+WIN_SIZE    = int(config.get("window", 200000))
+PLOT_TOGGLE = _bool(config.get("plot", False))
+
+# Keep BAM_EXT simple: accept single string (user responsibility). If user gives list, join by comma.
+_raw_bam_ext = config.get("bam_ext", ".sort.mdup.bam")
+if isinstance(_raw_bam_ext, (list, tuple)):
+    BAM_EXT = ",".join(str(x) for x in _raw_bam_ext)
+else:
+    BAM_EXT = str(_raw_bam_ext)
+TMP_DIR     = str(config.get("tmp_dir", "/data/cephfs-1/scratch/groups/sanders/tmp"))
+
+# Informational prints (help catch config mistakes)
+print(f"[CONFIG] REF_FASTA = {REF_FASTA}", file=sys.stderr)
+print(f"[CONFIG] BAM_EXT  = {BAM_EXT}", file=sys.stderr)
 
 # Ashley defaults + overrides
 ASH_DEFAULT = {
@@ -44,131 +67,111 @@ ASH_DEFAULT = {
 ASH = {**ASH_DEFAULT, **config.get("ashleys", {})}
 ASH_ENABLED = _bool(ASH.get("enabled", True))
 
-# -------------------------- Discover BAMs (auto) --------------------------
+# -------------------------- Discover BAMs (FLAT / HIER via find) --------------------------
 def discover_bams(root: Path, bam_ext: str):
     """
-    Robust discovery of BAMs. Tries FLAT, then HIER (child/bam/*),
-    then a relaxed recursive fallback (**/*bam). Produces sanitized
-    sample IDs suitable for Snakemake wildcards.
+    Discover BAM files using 'find' (no recursive Python fallback).
+    Two layouts supported:
+      - FLAT:  <data_root>/*<bam_ext>
+      - HIER:  <data_root>/*/bam/*<bam_ext>
 
-    Returns (mode, bam_of).
+    Returns:
+        mode: "FLAT" or "HIER" or (None, {}) on error
+        bam_of: dict mapping library_id -> absolute bam path
     """
-    import re, sys
+    import subprocess, shlex
 
-    def strip_bam_suffix(name: str) -> str:
-        # remove trailing .bam but keep descriptive suffixes (like .sort.mdup)
-        return re.sub(r"\.bam$", "", name)
-
-    def make_safe_id(s: str) -> str:
-        # collapse whitespace, replace any run of non-alnum._- with underscore,
-        # trim leading/trailing underscores and lowercase for stability
-        if s is None:
-            return ""
-        s = str(s)
+    def sanitize_id(s: str) -> str:
+        # keep it short and safe for snakemake wildcards
         s = s.replace("\u00A0", " ")
         s = s.strip()
         s = re.sub(r"\s+", "_", s)
         s = re.sub(r"[^A-Za-z0-9._-]+", "_", s)
         s = re.sub(r"_+", "_", s)
-        s = s.strip("_")
-        return s
+        return s.strip("_")
 
-    def meaningful_ancestor(path: Path, max_hops=4):
-        # return nearest ancestor name that is not a trivial directory like 'bam', 'data', ''.
-        trivial = set(["bam", "bams", "data", "raw", "reads", "fastq", "inputs", "input"])
-        cur = path
-        hops = 0
-        while hops < max_hops and cur is not None and cur.name:
-            name = cur.name
-            if name.lower() not in trivial:
-                return name
-            cur = cur.parent
-            hops += 1
-        # fallback to immediate parent name even if trivial
-        return path.parent.name or ""
+    def try_find(pattern: str, maxdepth: int = None):
+        # use find to match files exactly; return list of Path
+        # pattern e.g. '* .sort.mdup.bam' (no shell expansion here)
+        cmd = ["find", str(root)]
+        if maxdepth is not None:
+            cmd += ["-maxdepth", str(maxdepth)]
+        cmd += ["-type", "f", "-name", pattern]
+        try:
+            out = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, text=True)
+            if out.returncode not in (0, 1):  # 1 = no matches for some find implementations
+                # still try to parse output; but warn
+                print(f"[discover_bams] find exited {out.returncode}: {out.stderr.strip()}", file=sys.stderr)
+            paths = [Path(p) for p in out.stdout.splitlines() if p.strip()]
+            return sorted(paths)
+        except Exception as e:
+            print(f"[discover_bams] find invocation failed: {e}", file=sys.stderr)
+            return []
 
-    bam_of = {}
-    mode = None
-
+    # quick existence check
     if not root.exists():
         print(f"[ERROR] data_location does not exist: {root}", file=sys.stderr)
         return None, {}
 
-    # normalize ext input: allows CSV or single
-    be = str(bam_ext or "").strip()
-    alt_exts = [be] if be else []
-    if "," in be:
-        alt_exts = [x.strip() for x in be.split(",") if x.strip()]
-    # fallback common suffixes if none provided
-    def good_ext(x):
-        return bool(x) and x.endswith("bam")
-    alt_exts = [x if x.startswith(".") else ("." + x) for x in alt_exts if good_ext(x)]
-    if not alt_exts:
-        alt_exts = [".sort.mdup.bam", ".mdup.bam", ".markdup.bam", ".bam"]
+    # Accept comma-separated alternatives in BAM_EXT (user responsibility)
+    exts = [x.strip() for x in BAM_EXT.split(",") if x.strip()]
+    if not exts:
+        exts = [".sort.mdup.bam"]
 
     # ---------- FLAT ----------
-    for ext in alt_exts:
-        flat = sorted(root.glob(f"*{ext}"))
-        if flat:
-            mode = "FLAT"
-            for b in flat:
-                sid = strip_bam_suffix(b.name)
-                sid = make_safe_id(sid)
-                bam_of[sid] = str(b)
-            print(f"[discover_bams] FLAT match with ext={ext}: found {len(flat)} bams", file=sys.stderr)
-            # show some examples
-            if len(bam_of) > 0:
-                ex = list(bam_of.keys())[:6]
-                print(f"[discover_bams] examples: {ex}", file=sys.stderr)
-            return mode, bam_of
+    for ext in exts:
+        pat = f"*{ext}"
+        found = try_find(pat, maxdepth=1)
+        if found:
+            bam_of = {}
+            for p in found:
+                sid = sanitize_id(p.name.replace(ext, ""))  # remove ext exact match
+                bam_of[sid] = str(p.resolve())
+            print(f"[discover_bams] FLAT: found {len(bam_of)} files (ext={ext})", file=sys.stderr)
+            print(f"[discover_bams] examples: {list(bam_of.keys())[:6]}", file=sys.stderr)
+            return "FLAT", bam_of
 
-    # ---------- HIER (child/bam/*) ----------
+    # ---------- HIER (childdir/bam/*) ----------
+    bam_of = {}
+    # iterate direct children and look for child/bam/*ext
     for child in sorted(p for p in root.iterdir() if p.is_dir()):
         bamdir = child / "bam"
         if not bamdir.is_dir():
             continue
-        for ext in alt_exts:
-            found = sorted(bamdir.glob(f"*{ext}"))
-            for b in found:
-                bam_base = strip_bam_suffix(b.name)
+        for ext in exts:
+            pat = f"*{ext}"
+            # use find limited to this bamdir
+            try:
+                out = subprocess.run(["find", str(bamdir), "-maxdepth", "1", "-type", "f", "-name", pat],
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, text=True)
+                hits = [Path(p) for p in out.stdout.splitlines() if p.strip()]
+            except Exception as e:
+                hits = []
+                print(f"[discover_bams] find failed on {bamdir}: {e}", file=sys.stderr)
+            for p in hits:
+                base = p.name
+                # remove ext exactly once
+                if base.endswith(ext):
+                    bam_base = base[: -len(ext)]
+                else:
+                    bam_base = re.sub(r"\.bam$", "", base)
                 sid_raw = f"{child.name}_{bam_base}"
-                sid = make_safe_id(sid_raw)
+                sid = sanitize_id(sid_raw)
                 if sid in bam_of:
-                    print(f"[WARN] Duplicate library ID {sid} (old: {bam_of[sid]} new: {b})", file=sys.stderr)
-                bam_of[sid] = str(b)
+                    print(f"[WARN] duplicate sid {sid} (old: {bam_of[sid]}, new: {p})", file=sys.stderr)
+                    # append short hash to preserve uniqueness
+                    sid = f"{sid}_{str(abs(hash(str(p))))[:6]}"
+                bam_of[sid] = str(p.resolve())
+
     if bam_of:
-        mode = "HIER"
-        print(f"[discover_bams] HIER match: found {len(bam_of)} bams under child/bam/ dirs", file=sys.stderr)
-        if len(bam_of) > 0:
-            print(f"[discover_bams] examples: {list(bam_of.keys())[:6]}", file=sys.stderr)
-        return mode, bam_of
+        print(f"[discover_bams] HIER: found {len(bam_of)} files under child/*/bam", file=sys.stderr)
+        print(f"[discover_bams] examples: {list(bam_of.keys())[:6]}", file=sys.stderr)
+        return "HIER", bam_of
 
-    # ---------- RELAXED RECURSIVE FALLBACK ----------
-    print("[discover_bams] No FLAT or HIER matches. Trying recursive fallback '**/*bam' (this may be slow)...", file=sys.stderr)
-    rec = sorted(root.rglob("*.bam"))
-    if rec:
-        for b in rec:
-            bam_base = strip_bam_suffix(b.name)
-            # try to choose meaningful parent (skip trivial 'bam' dirs)
-            anc = meaningful_ancestor(b.parent)
-            if anc:
-                sid_raw = f"{anc}_{bam_base}"
-            else:
-                sid_raw = bam_base
-            sid = make_safe_id(sid_raw)
-            # last-resort uniqueness: if duplicate, append short hash suffix
-            if sid in bam_of:
-                short = str(abs(hash(str(b))) )[:6]
-                sid = f"{sid}_{short}"
-            bam_of[sid] = str(b)
-        mode = "RECURSIVE"
-        print(f"[discover_bams] RECURSIVE found {len(bam_of)} bams", file=sys.stderr)
-        print(f"[discover_bams] examples: {list(bam_of.keys())[:8]}", file=sys.stderr)
-        return mode, bam_of
-
-    # ---------- NOTHING FOUND ----------
-    print(f"[ERROR] No BAMs found under {root}. Looked for extensions: {alt_exts}.", file=sys.stderr)
-    print(f"[ERROR] Consider setting 'bam_ext' in config (e.g. '.bam' or '.sort.mdup.bam'), and ensure the user has permissions.", file=sys.stderr)
+    # nothing found -> fail fast with clear guidance
+    print(f"[ERROR] No BAMs found under {root}. Searched for extensions: {exts}", file=sys.stderr)
+    print("[ERROR] Expected layout: FLAT: <data_root>/*<ext>  OR  HIER: <data_root>/<sample>/bam/*<ext>", file=sys.stderr)
+    print("[ERROR] If your BAMs live elsewhere, set 'data_location' to that directory or change 'bam_ext' in config.yaml.", file=sys.stderr)
     return None, {}
 
 MODE, BAM_OF = discover_bams(DATA_ROOT, BAM_EXT)
