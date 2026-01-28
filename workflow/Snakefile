@@ -114,7 +114,6 @@ def discover_bams(root: Path, bam_ext: str):
             bam_of[sid] = str(p.resolve())
 
     if bam_of:
-        print("[discover_bams] HIER: found " + str(len(bam_of)) + " bams under child/*/bam", file=sys.stderr)
         return mode, bam_of
 
     print("[ERROR] No BAMs found under " + str(root) + ". Looked for '*" + be + "' in FLAT mode or '*/bam/*" + be + "'", file=sys.stderr)
@@ -139,15 +138,15 @@ print(r"""
 """)
 print("Starting BamQC pipeline...\n")
 
-# Helpful startup prints (concatenation)
-print("[CONFIG] Using reference: " + ref, file=sys.stderr)
 print("\n=== BamQC: input discovery ===")
-print("- Mode: " + str(MODE))
 print("- data_location: " + str(DATA_ROOT))
 print("- output_location: " + str(OUT_ROOT))
 print("- reference: " + REF_FASTA)
+print("- Mode: " + str(MODE))
+SAMPLE_IDS = sorted({s.split("_", 1)[0] for s in SAMPLES})
+print("- Discovered samples: " + str(len(SAMPLE_IDS)))
 print("- discovered libraries: " + str(len(SAMPLES)))
-print("  · showing first 8: " + ", ".join(SAMPLES[:8]) + ("..." if len(SAMPLES)>8 else ""))
+print("  head -n 8: " + ", ".join(SAMPLES[:8]) + ("..." if len(SAMPLES)>8 else ""))
 print("- Ashley: " + ("ENABLED" if ASH_ENABLED else "disabled"))
 print("================================\n")
 
