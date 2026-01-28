@@ -4,7 +4,7 @@ output_location: "/data/cephfs-1/scratch/groups/sanders/kiwi_tmp/BRDU-OP-ADCR11/
 
 # -------- Reference --------
 ref: "hg38"  # or "mm10", "T2T"
-reference_path: "/data/cephfs-1/home/users/pweidne_m/work/mosaicatcher-pipeline-BIH/workflow/data/ref_genomes"
+reference_path: "$HOME/work/mosaicatcher-pipeline-BIH/workflow/data/ref_genomes"
 window: 200000
 bam_ext: ".sort.mdup.bam"
 tmp_dir: "/data/cephfs-1/scratch/groups/sanders/kiwi_tmp/tmp"
@@ -14,8 +14,8 @@ plot: False
 # -------- External Ashley launcher (Option A) --------
 ashleys:
   enabled: true
-  bin: "/data/cephfs-1/home/users/pweidne_m/work/ashleys-qc/bin/ashleys.py"
-  model_path: "/data/cephfs-1/home/users/pweidne_m/work/ashleys-qc/models/svc_default.pkl"
+  bin: "$HOME/work/ashleys-qc/bin/ashleys.py"
+  model_path: "$HOME/work/ashleys-qc/models/svc_default.pkl"
   win_sizes: [5000000,2000000,1000000,800000,600000,400000,200000]
   threads: 32
   mem_mb: 200000
