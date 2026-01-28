@@ -7,7 +7,7 @@ ref: "hg38"  # or "mm10", "T2T"
 reference_path: "$HOME/work/mosaicatcher-pipeline-BIH/workflow/data/ref_genomes"
 window: 200000
 bam_ext: ".sort.mdup.bam"
-tmp_dir: "/data/cephfs-1/scratch/groups/sanders/kiwi_tmp/tmp"
+tmp_dir: "$TMPDIR"
 # -------- Plots --------
 plot: False
 
