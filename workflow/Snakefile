@@ -168,6 +168,7 @@ def discover_bams(root: Path, bam_ext: str):
     print("[ERROR] Expected FLAT: <data_root>/*<ext> OR HIER: <data_root>/<sample>/bam/*<ext>", file=sys.stderr)
     return None, {}
 
+
 MODE, BAM_OF = discover_bams(DATA_ROOT, BAM_EXT)
 SAMPLES = sorted(BAM_OF.keys())
 
@@ -191,7 +192,7 @@ print("\n=== BamQC: input discovery ===")
 print(f"- Mode: {MODE}")
 print(f"- data_location: {DATA_ROOT}")
 print(f"- output_location: {OUT_ROOT}")
-print(f"- reference: {REF_NAME}  ({REF_FASTA})")
+print(f"- reference: {REF_NAME} ({REF_FASTA})")
 print(f"- discovered libraries: {len(SAMPLES)}")
 print("  · showing first 8:", ", ".join(SAMPLES[:8]), ("..." if len(SAMPLES)>8 else ""))
 print(f"- Ashley: {'ENABLED' if ASH_ENABLED else 'disabled'}")
