@@ -361,7 +361,7 @@ rule windows_gc:
         gc=WIN_GC_GZ
     conda: "envs/qc_env.yaml"
     log:
-        out_path("logs", f"windows_{WIN_SIZE}.gc.log")
+        out_path("logs", "windows_" + str(WIN_SIZE) + ".gc.log")
     params:
         out_dir=str(OUT_ROOT)
     shell:
@@ -660,7 +660,7 @@ rule make_sample_final_qc:
 rule plot_qc:
     input:
         final=out_path("final_qc.tsv"),
-        preseq=lambda wc: out_path("preseq", f"{wc.sample}.lc.tsv")
+        preseq=lambda wc: out_path("preseq", wc.sample + ".lc.tsv")
     output:
         pdf=out_path("plots", "per-lib-qc", "{sample}.qc.pdf")
     threads: 1
