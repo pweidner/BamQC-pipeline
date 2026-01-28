@@ -128,8 +128,7 @@ def discover_bams(root: Path, bam_ext: str):
     # ---------- NOTHING FOUND ----------
     print(
         f"[ERROR] No BAMs found under {root}. "
-        f"Looked for '*{be}' in FLAT mode or '*/bam/*{be}' in HIER mode. "
-        f"(bam_ext repr={be!r})",
+        f"Looked for '*{be}' in FLAT mode or '*/bam/*{be}' in HIER mode. ",
         file=sys.stderr,
     )
     return None, {}
