@@ -48,39 +48,60 @@ ASH_ENABLED = _bool(ASH.get("enabled", True))
 def discover_bams(root: Path, bam_ext: str):
     """
     Robust discovery of BAMs. Tries FLAT, then HIER (child/bam/*),
-    then a relaxed recursive fallback (**/*bam). Emits helpful debug
-    prints to stderr so the user can see why nothing was found.
+    then a relaxed recursive fallback (**/*bam). Produces sanitized
+    sample IDs suitable for Snakemake wildcards.
+
     Returns (mode, bam_of).
     """
-    import re, glob, itertools, sys
+    import re, sys
 
     def strip_bam_suffix(name: str) -> str:
         # remove trailing .bam but keep descriptive suffixes (like .sort.mdup)
-        name = re.sub(r"\.bam$", "", name)
-        return name
+        return re.sub(r"\.bam$", "", name)
+
+    def make_safe_id(s: str) -> str:
+        # collapse whitespace, replace any run of non-alnum._- with underscore,
+        # trim leading/trailing underscores and lowercase for stability
+        if s is None:
+            return ""
+        s = str(s)
+        s = s.replace("\u00A0", " ")
+        s = s.strip()
+        s = re.sub(r"\s+", "_", s)
+        s = re.sub(r"[^A-Za-z0-9._-]+", "_", s)
+        s = re.sub(r"_+", "_", s)
+        s = s.strip("_")
+        return s
+
+    def meaningful_ancestor(path: Path, max_hops=4):
+        # return nearest ancestor name that is not a trivial directory like 'bam', 'data', ''.
+        trivial = set(["bam", "bams", "data", "raw", "reads", "fastq", "inputs", "input"])
+        cur = path
+        hops = 0
+        while hops < max_hops and cur is not None and cur.name:
+            name = cur.name
+            if name.lower() not in trivial:
+                return name
+            cur = cur.parent
+            hops += 1
+        # fallback to immediate parent name even if trivial
+        return path.parent.name or ""
 
     bam_of = {}
     mode = None
 
-    try:
-        if not root.exists():
-            print(f"[ERROR] data_location does not exist: {root}", file=sys.stderr)
-            return None, {}
-    except Exception as e:
-        print(f"[ERROR] Could not access data_location {root}: {e}", file=sys.stderr)
+    if not root.exists():
+        print(f"[ERROR] data_location does not exist: {root}", file=sys.stderr)
         return None, {}
 
-    # Normalize requested extension
+    # normalize ext input: allows CSV or single
     be = str(bam_ext or "").strip()
-    # If user gave comma-separated alternatives, allow them
     alt_exts = [be] if be else []
     if "," in be:
         alt_exts = [x.strip() for x in be.split(",") if x.strip()]
-
-    # ensure each alt ext begins with '.' and ends with 'bam' minimally
+    # fallback common suffixes if none provided
     def good_ext(x):
-        if not x: return False
-        return x.endswith("bam")
+        return bool(x) and x.endswith("bam")
     alt_exts = [x if x.startswith(".") else ("." + x) for x in alt_exts if good_ext(x)]
     if not alt_exts:
         alt_exts = [".sort.mdup.bam", ".mdup.bam", ".markdup.bam", ".bam"]
@@ -92,56 +113,58 @@ def discover_bams(root: Path, bam_ext: str):
             mode = "FLAT"
             for b in flat:
                 sid = strip_bam_suffix(b.name)
+                sid = make_safe_id(sid)
                 bam_of[sid] = str(b)
             print(f"[discover_bams] FLAT match with ext={ext}: found {len(flat)} bams", file=sys.stderr)
+            # show some examples
+            if len(bam_of) > 0:
+                ex = list(bam_of.keys())[:6]
+                print(f"[discover_bams] examples: {ex}", file=sys.stderr)
             return mode, bam_of
 
-    # ---------- HIER ----------
-    # look for direct children that have a 'bam' subdir
-    hier_hits = []
-    try:
-        for child in sorted(p for p in root.iterdir() if p.is_dir()):
-            bamdir = child / "bam"
-            if not bamdir.is_dir():
-                continue
-            # try each ext
-            for ext in alt_exts:
-                found = sorted(bamdir.glob(f"*{ext}"))
-                if found:
-                    hier_hits.extend(found)
-                    for b in found:
-                        bam_base = strip_bam_suffix(b.name)
-                        sid = f"{child.name}_{bam_base}"
-                        if sid in bam_of:
-                            print(f"[WARN] Duplicate library ID {sid} (old: {bam_of[sid]} new: {b})", file=sys.stderr)
-                        bam_of[sid] = str(b)
-        if bam_of:
-            mode = "HIER"
-            print(f"[discover_bams] HIER match: found {len(bam_of)} bams under child/bam/ dirs", file=sys.stderr)
-            return mode, bam_of
-    except PermissionError as e:
-        print(f"[discover_bams] Permission error while scanning HIER: {e}", file=sys.stderr)
+    # ---------- HIER (child/bam/*) ----------
+    for child in sorted(p for p in root.iterdir() if p.is_dir()):
+        bamdir = child / "bam"
+        if not bamdir.is_dir():
+            continue
+        for ext in alt_exts:
+            found = sorted(bamdir.glob(f"*{ext}"))
+            for b in found:
+                bam_base = strip_bam_suffix(b.name)
+                sid_raw = f"{child.name}_{bam_base}"
+                sid = make_safe_id(sid_raw)
+                if sid in bam_of:
+                    print(f"[WARN] Duplicate library ID {sid} (old: {bam_of[sid]} new: {b})", file=sys.stderr)
+                bam_of[sid] = str(b)
+    if bam_of:
+        mode = "HIER"
+        print(f"[discover_bams] HIER match: found {len(bam_of)} bams under child/bam/ dirs", file=sys.stderr)
+        if len(bam_of) > 0:
+            print(f"[discover_bams] examples: {list(bam_of.keys())[:6]}", file=sys.stderr)
+        return mode, bam_of
 
     # ---------- RELAXED RECURSIVE FALLBACK ----------
-    # Try a recursive glob for any *.bam if nothing found (helps for odd layouts)
     print("[discover_bams] No FLAT or HIER matches. Trying recursive fallback '**/*bam' (this may be slow)...", file=sys.stderr)
-    try:
-        rec = sorted(root.rglob("*.bam"))
-        if rec:
-            for b in rec:
-                sid = strip_bam_suffix(b.name)
-                # attempt to derive a sample prefix with parent dir if sane
-                parent = b.parent.name
-                sapply = f"{parent}_{sid}" if parent else sid
-                if sapply in bam_of:
-                    # final fallback: use full path hashed-ish
-                    sapply = sid + "_" + str(abs(hash(str(b))) )[:6]
-                bam_of[sapply] = str(b)
-            mode = "RECURSIVE"
-            print(f"[discover_bams] RECURSIVE found {len(bam_of)} bams", file=sys.stderr)
-            return mode, bam_of
-    except Exception as e:
-        print(f"[discover_bams] recursive scan failed: {e}", file=sys.stderr)
+    rec = sorted(root.rglob("*.bam"))
+    if rec:
+        for b in rec:
+            bam_base = strip_bam_suffix(b.name)
+            # try to choose meaningful parent (skip trivial 'bam' dirs)
+            anc = meaningful_ancestor(b.parent)
+            if anc:
+                sid_raw = f"{anc}_{bam_base}"
+            else:
+                sid_raw = bam_base
+            sid = make_safe_id(sid_raw)
+            # last-resort uniqueness: if duplicate, append short hash suffix
+            if sid in bam_of:
+                short = str(abs(hash(str(b))) )[:6]
+                sid = f"{sid}_{short}"
+            bam_of[sid] = str(b)
+        mode = "RECURSIVE"
+        print(f"[discover_bams] RECURSIVE found {len(bam_of)} bams", file=sys.stderr)
+        print(f"[discover_bams] examples: {list(bam_of.keys())[:8]}", file=sys.stderr)
+        return mode, bam_of
 
     # ---------- NOTHING FOUND ----------
     print(f"[ERROR] No BAMs found under {root}. Looked for extensions: {alt_exts}.", file=sys.stderr)
