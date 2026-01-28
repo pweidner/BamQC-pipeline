@@ -24,10 +24,11 @@ DATA_ROOT   = Path(config["data_location"]).resolve()
 OUT_ROOT    = Path(config["output_location"]).resolve()
 REF_NAME = str(config.get("ref", "hg38")).strip()
 REF_BASE = str(config.get("reference_path", "")).strip()
-if not REF_BASE:
+if not reference_path:
     raise ValueError("[CONFIG ERROR] 'reference_path' must be set in config.yaml")
 
-REF_FASTA = f"{REF_BASE}/{REF_NAME}.fa"
+# EXACT paste0 equivalent
+REF_FASTA = REF_BASE + "/" + REF_NAME + ".fa"
 
 WIN_SIZE    = int(config.get("window", 200000))
 PLOT_TOGGLE = _bool(config.get("plot", False))
