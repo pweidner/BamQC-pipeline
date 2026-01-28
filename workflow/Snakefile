@@ -1,40 +1,42 @@
-# Snakefile
+# Snakefile (cleaned header + discovery + outputs)
 configfile: "config/config.yaml"
 
 # =========================== Imports & helpers ============================
-import os, sys, glob, re
+import os, sys, subprocess, re
 from pathlib import Path
 
 def _bool(x, default=False):
-    if x is None: return default
-    if isinstance(x, bool): return x
+    if x is None:
+        return default
+    if isinstance(x, bool):
+        return x
     return str(x).lower() in ("1","true","yes","y","on")
 
 def sanitize_suffix(x, default):
     if x is None:
         x = default
     x = str(x)
-    # normalize Unicode whitespace (incl NBSP) and remove *all* surrounding whitespace
+    # normalize Unicode whitespace (incl NBSP) and remove *all* whitespace
     x = x.replace("\u00A0", " ")
-    x = re.sub(r"\s+", "", x)   # removes any whitespace characters anywhere
+    x = re.sub(r"\s+", "", x)
     return x
 
 # -------------------- Read config with sensible defaults ------------------
-DATA_ROOT   = Path(config["data_location"]).resolve()
-OUT_ROOT    = Path(config["output_location"]).resolve()
+# keep Path.resolve for DATA/OUT roots (good practice)
+DATA_ROOT = Path(config["data_location"]).resolve()
+OUT_ROOT  = Path(config["output_location"]).resolve()
+
+# paste0-style REF_FASTA
 ref = str(config.get("ref", "hg38")).strip()
 reference_path = str(config.get("reference_path", "")).strip()
-
 if not reference_path:
     raise ValueError("[CONFIG ERROR] 'reference_path' must be set in config.yaml")
-
-# EXACT paste0 equivalent
 REF_FASTA = reference_path + "/" + ref + ".fa"
 
+# other settings
 WIN_SIZE    = int(config.get("window", 200000))
 PLOT_TOGGLE = _bool(config.get("plot", False))
-
-BAM_EXT = sanitize_suffix(config.get("bam_ext"), ".sort.mdup.bam")
+BAM_EXT     = sanitize_suffix(config.get("bam_ext"), ".sort.mdup.bam")
 TMP_DIR     = str(config.get("tmp_dir", "/data/cephfs-1/scratch/groups/sanders/tmp"))
 
 # Ashley defaults + overrides
@@ -53,48 +55,37 @@ ASH_ENABLED = _bool(ASH.get("enabled", True))
 # -------------------------- Discover BAMs (FLAT / HIER via find) --------------------------
 def discover_bams(root: Path, bam_ext: str):
     """
-    Simple BAM discovery using find (preserves original ID behavior):
-      - FLAT: looks for files directly under root matching "*{bam_ext}" (maxdepth 1)
-      - HIER: looks under each child/<bam> directory for "*{bam_ext}" (maxdepth 1)
-
-    Returns (mode, bam_of) with bam_of: {LibraryID -> absolute path}
-    NOTE: this intentionally keeps IDs identical to the old behavior:
-          FLAT: basename without trailing .bam
-          HIER: childname_basename_without_trailing_.bam
+    Use POSIX 'find' (safe quoting via subprocess) and construct pattern
+    with explicit string concatenation: pattern = "*" + bam_ext
     """
     import subprocess
 
     def strip_bam_suffix(name: str) -> str:
-        # remove only a trailing ".bam"
         return name[:-4] if name.endswith(".bam") else name
 
     def run_find(path: str, maxdepth: int, name_pattern: str):
-        # Use list args to avoid shell quoting issues
         cmd = ["find", path, "-maxdepth", str(maxdepth), "-type", "f", "-name", name_pattern]
         try:
             proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
         except Exception as e:
-            print(f"[discover_bams] find failed for {path}: {e}", file=sys.stderr)
+            print("[discover_bams] find failed for " + path + ": " + str(e), file=sys.stderr)
             return []
         if proc.stderr and proc.stderr.strip():
-            # non-fatal; show it so users can debug permissions etc.
-            print(f"[discover_bams] find stderr: {proc.stderr.strip()}", file=sys.stderr)
+            print("[discover_bams] find stderr: " + proc.stderr.strip(), file=sys.stderr)
         return [Path(x) for x in proc.stdout.splitlines() if x.strip()]
 
-    # sanity
     if not root.exists():
-        print(f"[ERROR] data_location does not exist: {root}", file=sys.stderr)
+        print("[ERROR] data_location does not exist: " + str(root), file=sys.stderr)
         return None, {}
 
-    # Ensure bam_ext is exactly what user configured (avoid adding spaces)
     be = str(bam_ext or "").strip()
     if be == "":
         print("[discover_bams] Warning: bam_ext empty; defaulting to '.sort.mdup.bam'", file=sys.stderr)
         be = ".sort.mdup.bam"
 
-    # ---------- FLAT ----------
-    # pattern must be e.g. "*.sort.mdup.bam" (no space between * and ext)
-    pattern = "*" + be
+    pattern = "*" + be  # safe, no whitespace between * and ext
+
+    # FLAT search (maxdepth 1)
     flat = run_find(str(root), maxdepth=1, name_pattern=pattern)
     if flat:
         mode = "FLAT"
@@ -102,10 +93,10 @@ def discover_bams(root: Path, bam_ext: str):
         for p in sorted(flat):
             sid = strip_bam_suffix(p.name)
             bam_of[sid] = str(p.resolve())
-        print(f"[discover_bams] FLAT: found {len(bam_of)} bams under {root}", file=sys.stderr)
+        print("[discover_bams] FLAT: found " + str(len(bam_of)) + " bams under " + str(root), file=sys.stderr)
         return mode, bam_of
 
-    # ---------- HIER ----------
+    # HIER search (child/<bam> directories)
     mode = "HIER"
     bam_of = {}
     for child in sorted(p for p in root.iterdir() if p.is_dir()):
@@ -117,26 +108,16 @@ def discover_bams(root: Path, bam_ext: str):
             continue
         for p in sorted(found):
             bam_base = strip_bam_suffix(p.name)
-            sid = f"{child.name}_{bam_base}"
+            sid = child.name + "_" + bam_base
             if sid in bam_of:
-                print(
-                    f"[WARN] Duplicate library ID {sid}\n"
-                    f"  old: {bam_of[sid]}\n"
-                    f"  new: {p}",
-                    file=sys.stderr,
-                )
+                print("[WARN] Duplicate library ID " + sid + " (old: " + bam_of[sid] + " new: " + str(p) + ")", file=sys.stderr)
             bam_of[sid] = str(p.resolve())
 
     if bam_of:
-        print(f"[discover_bams] HIER: found {len(bam_of)} bams under child/*/bam", file=sys.stderr)
+        print("[discover_bams] HIER: found " + str(len(bam_of)) + " bams under child/*/bam", file=sys.stderr)
         return mode, bam_of
 
-    # ---------- NOTHING FOUND ----------
-    print(
-        f"[ERROR] No BAMs found under {root}. "
-        f"Looked for '*{be}' in FLAT mode or '*/bam/*{be}' in HIER mode. ",
-        file=sys.stderr,
-    )
+    print("[ERROR] No BAMs found under " + str(root) + ". Looked for '*" + be + "' in FLAT mode or '*/bam/*" + be + "'", file=sys.stderr)
     return None, {}
 
 MODE, BAM_OF = discover_bams(DATA_ROOT, BAM_EXT)
@@ -157,20 +138,22 @@ print(r"""
                                         |__/                 |__/          |__/                                                                                  
 """)
 print("Starting BamQC pipeline...\n")
-# Helpful startup print (shows EXACT string used)
-print(f"[CONFIG] Using reference: {ref})", file=sys.stderr)
+
+# Helpful startup prints (concatenation)
+print("[CONFIG] Using reference: " + ref, file=sys.stderr)
 print("\n=== BamQC: input discovery ===")
-print(f"- Mode: {MODE}")
-print(f"- data_location: {DATA_ROOT}")
-print(f"- output_location: {OUT_ROOT}")
-print(f"- reference: {REF_FASTA}")
-print(f"- discovered libraries: {len(SAMPLES)}")
-print("  · showing first 8:", ", ".join(SAMPLES[:8]), ("..." if len(SAMPLES)>8 else ""))
-print(f"- Ashley: {'ENABLED' if ASH_ENABLED else 'disabled'}")
+print("- Mode: " + str(MODE))
+print("- data_location: " + str(DATA_ROOT))
+print("- output_location: " + str(OUT_ROOT))
+print("- reference: " + REF_FASTA)
+print("- discovered libraries: " + str(len(SAMPLES)))
+print("  · showing first 8: " + ", ".join(SAMPLES[:8]) + ("..." if len(SAMPLES)>8 else ""))
+print("- Ashley: " + ("ENABLED" if ASH_ENABLED else "disabled"))
 print("================================\n")
 
 # ---------------------------- Output structure ----------------------------
-def out_path(*parts): return str(OUT_ROOT.joinpath(*parts))
+def out_path(*parts):
+    return str(OUT_ROOT.joinpath(*parts))
 
 DIR_LOGS   = out_path("logs")
 DIR_STATS  = out_path("stats-by-lib")
@@ -178,13 +161,11 @@ DIR_BINS   = out_path("binned")
 DIR_QC2    = out_path("qc-from-bins")
 DIR_PRESEQ = out_path("preseq")
 DIR_PLOTS  = out_path("plots")
-
-# new: clearly discoverable results + metadata
 DIR_RESULTS  = out_path("results")
 DIR_METADATA = out_path("metadata")
 
-WIN_BED_GZ = out_path(f"windows_{WIN_SIZE}.bed.gz")
-WIN_GC_GZ  = out_path(f"windows_{WIN_SIZE}.gc.tsv.gz")
+WIN_BED_GZ = out_path("windows_" + str(WIN_SIZE) + ".bed.gz")
+WIN_GC_GZ  = out_path("windows_" + str(WIN_SIZE) + ".gc.tsv.gz")
 
 # Ashley
 DIR_ASH        = out_path("ashleys")
