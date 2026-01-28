@@ -27,4 +27,4 @@ latency-wait: 60
 jobs: 500
 
 use-conda: true
-conda-frontend: "mamba"
+conda-frontend: "conda"
